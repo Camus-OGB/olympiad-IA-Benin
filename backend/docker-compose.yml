@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Backend FastAPI
+  backend:
+    build: .
+    container_name: olympiades-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - REDIS_ENABLED=${REDIS_ENABLED:-true}
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app  # Hot reload en développement
+    depends_on:
+      - db
+      - redis
+    networks:
+      - olympiades-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Base de données PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: olympiades-db
+    environment:
+      - POSTGRES_DB=olympiades_ia
+      - POSTGRES_USER=olympiades
+      - POSTGRES_PASSWORD=olympiades_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - olympiades-network
+
+  # Redis (cache - recommandé pour la production)
+  redis:
+    image: redis:7-alpine
+    container_name: olympiades-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - olympiades-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # pgAdmin (optionnel - pour gérer la base de données)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: olympiades-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@olympiades-ia.bj
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - olympiades-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  olympiades-network:
+    driver: bridge

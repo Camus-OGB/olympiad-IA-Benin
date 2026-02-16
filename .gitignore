@@ -1,0 +1,63 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual env
+venv/
+backend/venv/
+env/
+ENV/
+
+# Node / Next.js
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+frontend/out/
+dist/
+build/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Uploads / generated assets
+backend/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Database (local dev)
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables
+.env
+.env.local
+.env*.local
+.env.*
+
+# Backup
+*-backup/
+*.backup
+
+# Temporary files
+*.tmp
+.temp/
+.cache/

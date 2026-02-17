@@ -38,9 +38,9 @@ export default function UsersManagementPage() {
   const loadUsers = async () => {
     try {
       setLoading(true)
-      // Endpoint fictif - à implémenter dans le backend
       const { data } = await apiClient.get('/admin/users')
-      setUsers(data)
+      // Ne garder que les admins et super admins (pas les candidats)
+      setUsers(data.filter((u: AdminUser) => u.role === 'admin' || u.role === 'super_admin'))
     } catch (err: any) {
       console.error('Erreur chargement utilisateurs:', err)
       setError('Erreur lors du chargement des utilisateurs')

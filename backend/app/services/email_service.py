@@ -1,13 +1,43 @@
 """
 Service d'envoi d'emails
-Utilise l'API HTTP Resend — pas de SMTP, fonctionne sur tous les hébergeurs
+Utilise smtplib (stdlib Python) — aucune dépendance externe
 """
-import httpx
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from app.core.config import settings
-from typing import List
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _send_email_sync(email_to: str, subject: str, html_content: str, text_content: str = None):
+    """Envoi synchrone via smtplib (stdlib) — exécuté dans un thread"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
+    msg["To"] = email_to
+
+    if text_content:
+        msg.attach(MIMEText(text_content, "plain", "utf-8"))
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    context = ssl.create_default_context()
+
+    if settings.MAIL_SSL_TLS:
+        # Port 465 — SSL direct
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=context) as server:
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.EMAILS_FROM_EMAIL, email_to, msg.as_string())
+    else:
+        # Port 587 — STARTTLS
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.EMAILS_FROM_EMAIL, email_to, msg.as_string())
 
 
 async def send_email(
@@ -16,29 +46,12 @@ async def send_email(
     html_content: str,
     text_content: str = None
 ):
-    """Envoie un email via l'API HTTP Resend (pas de SMTP)"""
+    """Envoie un email (async — délégué à un thread pour ne pas bloquer FastAPI)"""
     try:
-        payload = {
-            "from": f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>",
-            "to": [email_to],
-            "subject": subject,
-            "html": html_content,
-        }
-        if text_content:
-            payload["text"] = text_content
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.resend.com/emails",
-                headers={
-                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=15.0,
-            )
-            response.raise_for_status()
-
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None, _send_email_sync, email_to, subject, html_content, text_content
+        )
         logger.info(f"Email envoyé à {email_to}: {subject}")
         return True
     except Exception as e:

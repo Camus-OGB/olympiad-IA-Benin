@@ -431,7 +431,7 @@ export default function NewSession() {
           <div className="space-y-3">
             <label className="text-sm font-medium text-gray-700">Catégories</label>
             <div className="flex flex-wrap gap-2">
-              {questionStats.categories.map(category => (
+              {questionStats.categories.filter((c): c is string => !!c).map(category => (
                 <button
                   key={category}
                   type="button"

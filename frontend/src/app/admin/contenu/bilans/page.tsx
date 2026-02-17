@@ -79,7 +79,7 @@ export default function BilansManager() {
 
         <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-2xl text-white shadow-lg">
           <Users size={32} className="mb-3 opacity-80" />
-          <p className="text-3xl font-bold">{bilans.filter(b => b.isPublished).length}</p>
+          <p className="text-3xl font-bold">{bilans.length}</p>
           <p className="text-sm opacity-90">Bilans publiés</p>
         </div>
 

@@ -55,8 +55,9 @@ export default function ImportQuestionsPage() {
 
       questions.push({
         question: row.question,
-        options: [row.option1, row.option2, row.option3, row.option4],
-        correctAnswer: parseInt(row.correctAnswer),
+        options: [row.option1, row.option2, row.option3, row.option4].map((text, id) => ({ text, id })),
+        correctAnswers: [parseInt(row.correctAnswer)],
+        isMultipleAnswer: false,
         difficulty: row.difficulty,
         category: row.category,
         explanation: row.explanation || undefined,

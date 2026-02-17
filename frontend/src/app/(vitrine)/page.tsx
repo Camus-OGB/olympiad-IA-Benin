@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Calendar, Trophy, Users, Brain, MapPin, Sparkles, Zap, Target, ChevronRight, Quote, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { contentApi, NextDeadline, NewsItem, Testimonial } from '@/lib/api/content';
+import { contentApi, NextDeadline, NewsItem, GeneralTestimonial } from '@/lib/api/content';
 
 // Pas de données par défaut - on utilise uniquement les vraies données de la base
 

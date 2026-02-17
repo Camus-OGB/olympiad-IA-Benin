@@ -72,8 +72,9 @@ export default function QcmQuestions() {
       // Convertir les données du formulaire au format backend
       const questionData = {
         question: formData.text || '',
-        options: formData.choices || [],
-        correctAnswer: formData.correctAnswer || 0,
+        options: (formData.choices || []).map((text, id) => ({ text, id })),
+        correctAnswers: [formData.correctAnswer || 0],
+        isMultipleAnswer: false,
         difficulty: formData.difficulty === 'Facile' ? 'easy' : formData.difficulty === 'Moyen' ? 'medium' : 'hard',
         category: formData.category || '',
         points: formData.difficulty === 'Facile' ? 1 : formData.difficulty === 'Moyen' ? 2 : 3,
@@ -86,12 +87,12 @@ export default function QcmQuestions() {
       const newQuestion: Question = {
         id: parseInt(createdQuestion.id) || 0,
         type: 'QCM',
-        category: createdQuestion.category,
+        category: createdQuestion.category || '',
         text: createdQuestion.question,
         difficulty: createdQuestion.difficulty === 'easy' ? 'Facile' : createdQuestion.difficulty === 'medium' ? 'Moyen' : 'Difficile',
         sessions: 0,
-        choices: createdQuestion.options,
-        correctAnswer: createdQuestion.correctAnswer || 0,
+        choices: createdQuestion.options.map(o => typeof o === 'string' ? o : o.text),
+        correctAnswer: createdQuestion.correctAnswers?.[0] ?? 0,
       };
 
       setQuestions([...questions, newQuestion]);

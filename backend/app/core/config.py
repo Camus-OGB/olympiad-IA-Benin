@@ -49,15 +49,10 @@ class Settings(BaseSettings):
             origins.add(self.FRONTEND_URL.strip())
         return sorted([o for o in origins if o])
 
-    # Email SMTP
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
+    # Email (Resend API)
+    RESEND_API_KEY: str = ""
     EMAILS_FROM_EMAIL: str = ""
     EMAILS_FROM_NAME: str = ""
-    MAIL_SSL_TLS: bool = False
-    MAIL_STARTTLS: bool = True
 
     # Supabase Storage - Buckets séparés
     SUPABASE_URL: str = ""

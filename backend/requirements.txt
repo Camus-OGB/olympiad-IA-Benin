@@ -16,9 +16,7 @@ python-decouple==3.8
 pydantic[email]==2.10.3
 pydantic-settings==2.6.1
 
-# Email
-fastapi-mail==1.4.1
-aiosmtplib==2.0.2
+# Email (smtplib est inclus dans la stdlib Python)
 
 # Storage (Supabase)
 supabase==2.11.0

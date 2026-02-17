@@ -1,10 +1,8 @@
 """
 Service d'envoi d'emails
+Utilise l'API HTTP Resend — pas de SMTP, fonctionne sur tous les hébergeurs
 """
-import aiosmtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import httpx
 from app.core.config import settings
 from typing import List
 import logging
@@ -18,29 +16,29 @@ async def send_email(
     html_content: str,
     text_content: str = None
 ):
-    """Envoie un email via aiosmtplib directement"""
+    """Envoie un email via l'API HTTP Resend (pas de SMTP)"""
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
-        msg["To"] = email_to
-
+        payload = {
+            "from": f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>",
+            "to": [email_to],
+            "subject": subject,
+            "html": html_content,
+        }
         if text_content:
-            msg.attach(MIMEText(text_content, "plain", "utf-8"))
-        msg.attach(MIMEText(html_content, "html", "utf-8"))
+            payload["text"] = text_content
 
-        use_ssl = settings.MAIL_SSL_TLS
-        use_tls = settings.MAIL_STARTTLS
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=15.0,
+            )
+            response.raise_for_status()
 
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=use_ssl,
-            start_tls=use_tls,
-        )
         logger.info(f"Email envoyé à {email_to}: {subject}")
         return True
     except Exception as e:

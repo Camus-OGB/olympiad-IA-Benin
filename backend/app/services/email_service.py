@@ -1,28 +1,15 @@
 """
 Service d'envoi d'emails
 """
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+import aiosmtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from app.core.config import settings
 from typing import List
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def get_mail_config() -> ConnectionConfig:
-    """Construit la config email à la demande (pas au démarrage du module)"""
-    return ConnectionConfig(
-        MAIL_USERNAME=settings.SMTP_USER,
-        MAIL_PASSWORD=settings.SMTP_PASSWORD,
-        MAIL_FROM=settings.EMAILS_FROM_EMAIL,
-        MAIL_PORT=settings.SMTP_PORT,
-        MAIL_SERVER=settings.SMTP_HOST,
-        MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
-        MAIL_STARTTLS=settings.MAIL_STARTTLS,
-        MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
-        USE_CREDENTIALS=True,
-        VALIDATE_CERTS=False,
-    )
 
 
 async def send_email(
@@ -31,17 +18,29 @@ async def send_email(
     html_content: str,
     text_content: str = None
 ):
-    """Envoie un email"""
+    """Envoie un email via aiosmtplib directement"""
     try:
-        message = MessageSchema(
-            subject=subject,
-            recipients=[email_to],
-            body=html_content,
-            subtype="html"
-        )
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
+        msg["To"] = email_to
 
-        fm = FastMail(get_mail_config())
-        await fm.send_message(message)
+        if text_content:
+            msg.attach(MIMEText(text_content, "plain", "utf-8"))
+        msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+        use_ssl = settings.MAIL_SSL_TLS
+        use_tls = settings.MAIL_STARTTLS
+
+        await aiosmtplib.send(
+            msg,
+            hostname=settings.SMTP_HOST,
+            port=settings.SMTP_PORT,
+            username=settings.SMTP_USER,
+            password=settings.SMTP_PASSWORD,
+            use_tls=use_ssl,
+            start_tls=use_tls,
+        )
         logger.info(f"Email envoyé à {email_to}: {subject}")
         return True
     except Exception as e:

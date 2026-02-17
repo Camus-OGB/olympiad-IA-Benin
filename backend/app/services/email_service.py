@@ -9,19 +9,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# Configuration email
-conf = ConnectionConfig(
-    MAIL_USERNAME=settings.SMTP_USER,
-    MAIL_PASSWORD=settings.SMTP_PASSWORD,
-    MAIL_FROM=settings.EMAILS_FROM_EMAIL,
-    MAIL_PORT=settings.SMTP_PORT,
-    MAIL_SERVER=settings.SMTP_HOST,
-    MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
-    MAIL_STARTTLS=settings.MAIL_STARTTLS,
-    MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
-)
+def get_mail_config() -> ConnectionConfig:
+    """Construit la config email à la demande (pas au démarrage du module)"""
+    return ConnectionConfig(
+        MAIL_USERNAME=settings.SMTP_USER,
+        MAIL_PASSWORD=settings.SMTP_PASSWORD,
+        MAIL_FROM=settings.EMAILS_FROM_EMAIL,
+        MAIL_PORT=settings.SMTP_PORT,
+        MAIL_SERVER=settings.SMTP_HOST,
+        MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
+        MAIL_STARTTLS=settings.MAIL_STARTTLS,
+        MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
+        USE_CREDENTIALS=True,
+        VALIDATE_CERTS=False,
+    )
 
 
 async def send_email(
@@ -39,7 +40,7 @@ async def send_email(
             subtype="html"
         )
 
-        fm = FastMail(conf)
+        fm = FastMail(get_mail_config())
         await fm.send_message(message)
         logger.info(f"Email envoyé à {email_to}: {subject}")
         return True

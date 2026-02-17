@@ -1,53 +1,49 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Save, X, ArrowLeft, Calendar, ArrowUp, ArrowDown } from 'lucide-react';
-
-interface TimelineEvent {
-  id: string;
-  order: number;
-  date: string;
-  title: string;
-  description: string;
-}
+import { Plus, Edit, Trash2, Save, X, ArrowLeft, Calendar, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
+import { contentApi, PastEdition, PastTimelinePhase } from '@/lib/api/content';
 
 export default function GererTimeline() {
   const params = useParams();
   const router = useRouter();
-  const slug = params?.slug as string;
+  const editionId = params?.slug as string;
 
-  const [events, setEvents] = useState<TimelineEvent[]>([
-    {
-      id: '1',
-      order: 1,
-      date: "Fév — Mars 2025",
-      title: "Appel à candidatures",
-      description: "Plus de 700 inscrits."
-    },
-    {
-      id: '2',
-      order: 2,
-      date: "15 Mars 2025",
-      title: "Test de présélection",
-      description: "Épreuve théorique en ligne."
-    },
-    {
-      id: '3',
-      order: 3,
-      date: "Avr — Juil 2025",
-      title: "Formation Intensive",
-      description: "Bootcamps à Sèmè City."
-    }
-  ]);
-
+  const [edition, setEdition] = useState<PastEdition | null>(null);
+  const [events, setEvents] = useState<PastTimelinePhase[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
-  const [formData, setFormData] = useState<Partial<TimelineEvent>>({
+  const [editingEvent, setEditingEvent] = useState<PastTimelinePhase | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<{
+    date: string;
+    title: string;
+    description: string;
+  }>({
     date: '',
     title: '',
     description: ''
   });
+
+  useEffect(() => {
+    loadEdition();
+  }, [editionId]);
+
+  const loadEdition = async () => {
+    try {
+      setLoading(true);
+      const data = await contentApi.getPastEdition(editionId);
+      setEdition(data);
+      setEvents(data.pastTimelinePhases || []);
+    } catch (error) {
+      console.error('Erreur lors du chargement de l\'édition:', error);
+      alert('Erreur lors du chargement de l\'édition');
+      router.push('/admin/contenu/bilans');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAdd = () => {
     setIsEditing(true);
@@ -55,49 +51,125 @@ export default function GererTimeline() {
     setFormData({ date: '', title: '', description: '' });
   };
 
-  const handleEdit = (event: TimelineEvent) => {
+  const handleEdit = (event: PastTimelinePhase) => {
     setIsEditing(true);
     setEditingEvent(event);
-    setFormData(event);
+    setFormData({
+      date: event.date || '',
+      title: event.title,
+      description: event.description || ''
+    });
   };
 
-  const handleSave = () => {
-    if (editingEvent) {
-      setEvents(events.map(e => e.id === editingEvent.id ? { ...formData, id: e.id, order: e.order } as TimelineEvent : e));
-    } else {
-      const newEvent: TimelineEvent = {
-        ...formData,
-        id: Date.now().toString(),
-        order: events.length + 1
-      } as TimelineEvent;
-      setEvents([...events, newEvent]);
+  const handleSave = async () => {
+    if (!formData.title.trim()) {
+      alert('Le titre est obligatoire');
+      return;
     }
-    setIsEditing(false);
-    setEditingEvent(null);
+
+    setSaving(true);
+    try {
+      if (editingEvent) {
+        // Mise à jour
+        await contentApi.updateTimelinePhase(
+          editionId,
+          editingEvent.id,
+          {
+            phaseOrder: editingEvent.phaseOrder,
+            title: formData.title,
+            description: formData.description || undefined,
+            date: formData.date || undefined
+          }
+        );
+      } else {
+        // Création
+        await contentApi.createTimelinePhase(editionId, {
+          phaseOrder: events.length + 1,
+          title: formData.title,
+          description: formData.description || undefined,
+          date: formData.date || undefined
+        });
+      }
+
+      await loadEdition();
+      setIsEditing(false);
+      setEditingEvent(null);
+    } catch (error: any) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      alert(error?.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (phaseId: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cet événement ?')) {
-      setEvents(events.filter(e => e.id !== id));
+      try {
+        await contentApi.deleteTimelinePhase(editionId, phaseId);
+        await loadEdition();
+      } catch (error: any) {
+        console.error('Erreur lors de la suppression:', error);
+        alert(error?.response?.data?.detail || 'Erreur lors de la suppression');
+      }
     }
   };
 
-  const moveEvent = (index: number, direction: 'up' | 'down') => {
-    const newEvents = [...events];
+  const moveEvent = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
     if (targetIndex < 0 || targetIndex >= events.length) return;
 
-    [newEvents[index], newEvents[targetIndex]] = [newEvents[targetIndex], newEvents[index]];
-    newEvents.forEach((event, idx) => event.order = idx + 1);
+    try {
+      const phase1 = events[index];
+      const phase2 = events[targetIndex];
 
-    setEvents(newEvents);
+      // Échanger les ordres
+      await contentApi.updateTimelinePhase(editionId, phase1.id, {
+        phaseOrder: phase2.phaseOrder,
+        title: phase1.title,
+        description: phase1.description,
+        date: phase1.date
+      });
+
+      await contentApi.updateTimelinePhase(editionId, phase2.id, {
+        phaseOrder: phase1.phaseOrder,
+        title: phase2.title,
+        description: phase2.description,
+        date: phase2.date
+      });
+
+      await loadEdition();
+    } catch (error) {
+      console.error('Erreur lors du déplacement:', error);
+      alert('Erreur lors du déplacement de l\'événement');
+    }
   };
 
   const handleCancel = () => {
     setIsEditing(false);
     setEditingEvent(null);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-ioai-blue mx-auto mb-4" />
+          <p className="text-gray-600">Chargement de la timeline...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!edition) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-gray-600">Édition introuvable</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -110,7 +182,7 @@ export default function GererTimeline() {
             <ArrowLeft size={20} />
             Retour au bilan
           </button>
-          <h1 className="text-3xl font-display font-black text-gray-900">Timeline - {slug}</h1>
+          <h1 className="text-3xl font-display font-black text-gray-900">Timeline - Édition {edition.year}</h1>
           <p className="text-gray-500 mt-2">Chronologie du parcours de la sélection à la compétition</p>
         </div>
         <button
@@ -133,7 +205,7 @@ export default function GererTimeline() {
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 <Calendar className="inline w-4 h-4 mr-1" />
-                Date ou période *
+                Date ou période
               </label>
               <input
                 type="text"
@@ -152,6 +224,7 @@ export default function GererTimeline() {
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Test de présélection"
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
+                required
               />
             </div>
 
@@ -170,10 +243,20 @@ export default function GererTimeline() {
           <div className="flex gap-4 mt-8">
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all disabled:opacity-50"
             >
-              <Save size={20} />
-              Enregistrer
+              {saving ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Enregistrer
+                </>
+              )}
             </button>
             <button
               onClick={handleCancel}
@@ -191,12 +274,12 @@ export default function GererTimeline() {
         <h2 className="text-xl font-bold text-gray-900 mb-8">Aperçu de la timeline</h2>
 
         <div className="space-y-6">
-          {events.sort((a, b) => a.order - b.order).map((event, index) => (
+          {events.sort((a, b) => a.phaseOrder - b.phaseOrder).map((event, index) => (
             <div key={event.id} className="flex gap-6">
               {/* Ligne verticale et numéro */}
               <div className="flex flex-col items-center">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-ioai-blue to-ioai-green flex items-center justify-center text-white font-bold shadow-lg">
-                  {event.order}
+                  {event.phaseOrder}
                 </div>
                 {index < events.length - 1 && (
                   <div className="w-1 flex-1 bg-gradient-to-b from-ioai-blue to-ioai-green mt-2 mb-2 min-h-[40px]"></div>
@@ -208,9 +291,13 @@ export default function GererTimeline() {
                 <div className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200 hover:border-ioai-green transition-all">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <p className="text-sm font-bold text-ioai-blue mb-2">{event.date}</p>
+                      {event.date && (
+                        <p className="text-sm font-bold text-ioai-blue mb-2">{event.date}</p>
+                      )}
                       <h3 className="text-lg font-bold text-gray-900 mb-2">{event.title}</h3>
-                      <p className="text-gray-600">{event.description}</p>
+                      {event.description && (
+                        <p className="text-gray-600">{event.description}</p>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-1">

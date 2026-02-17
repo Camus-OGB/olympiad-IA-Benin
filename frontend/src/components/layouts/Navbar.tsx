@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X, BrainCircuit, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { contentApi, type PastEdition } from '@/lib/api/content';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [pastEditions, setPastEditions] = useState<PastEdition[]>([]);
   const pathname = usePathname();
 
   const toggleMenu = () => setIsOpen(!isOpen);
@@ -19,6 +21,12 @@ const Navbar: React.FC = () => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    contentApi.getPastEditions()
+      .then(data => setPastEditions([...data].sort((a, b) => b.year - a.year)))
+      .catch(() => {});
   }, []);
 
   const isActive = (path: string) =>
@@ -75,10 +83,12 @@ const Navbar: React.FC = () => {
                     <Link href="/bilan" className="block px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50 hover:text-ioai-blue transition-colors">
                       Toutes les éditions
                     </Link>
-                    <div className="h-px bg-gray-100 my-1"></div>
-                    <Link href="/bilan/edition-2025" className="block px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50 hover:text-ioai-blue transition-colors">
-                      Édition 2025
-                    </Link>
+                    {pastEditions.length > 0 && <div className="h-px bg-gray-100 my-1"></div>}
+                    {pastEditions.map(e => (
+                      <Link key={e.id} href={`/bilan/${e.id}`} className="block px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50 hover:text-ioai-blue transition-colors">
+                        Édition {e.year}
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -129,9 +139,11 @@ const Navbar: React.FC = () => {
             <Link href="/bilan" className="block px-4 py-3 rounded-lg font-medium text-text-secondary hover:bg-gray-50 transition-colors">
               Toutes les éditions
             </Link>
-            <Link href="/bilan/edition-2025" className="block px-4 py-3 rounded-lg font-medium text-text-secondary hover:bg-gray-50 transition-colors">
-              Édition 2025
-            </Link>
+            {pastEditions.map(e => (
+              <Link key={e.id} href={`/bilan/${e.id}`} className="block px-4 py-3 rounded-lg font-medium text-text-secondary hover:bg-gray-50 transition-colors">
+                Édition {e.year}
+              </Link>
+            ))}
             <div className="h-px bg-gray-100 my-2"></div>
             <Link href="/actualites" className="block px-4 py-3 rounded-lg font-medium text-text-secondary hover:bg-gray-50 transition-colors">
               Actualités

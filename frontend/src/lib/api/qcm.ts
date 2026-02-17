@@ -44,13 +44,20 @@ export interface QCMAttempt {
   answers: Record<string, number>
 }
 
-export interface QuestionWithAnswer extends Question {
+export interface QuestionWithAnswer {
+  id: string
+  question: string
+  options: Array<{ text: string; id: number } | string>
+  correctAnswers: number[]
+  isMultipleAnswer: boolean
   difficulty: string
-  category: string
+  categoryId?: string
+  category?: string
   explanation?: string
   points: number
   isActive: boolean
   createdAt: string
+  updatedAt: string
 }
 
 export interface QCMSessionResponse {
@@ -78,21 +85,30 @@ export interface QCMSessionResponse {
   updatedAt: string
 }
 
+export interface QuestionOption {
+  text: string
+  id: number
+}
+
 export interface QuestionCreate {
   question: string
-  options: string[]
-  correctAnswer: number
+  options: QuestionOption[]       // 2 à 6 options: [{text, id}, ...]
+  correctAnswers: number[]        // index des bonnes réponses: [0] ou [0, 2]
+  isMultipleAnswer: boolean
   difficulty: string
-  category: string
+  categoryId?: string
+  category?: string
   explanation?: string
   points: number
 }
 
 export interface QuestionUpdate {
   question?: string
-  options?: string[]
-  correctAnswer?: number
+  options?: QuestionOption[]
+  correctAnswers?: number[]
+  isMultipleAnswer?: boolean
   difficulty?: string
+  categoryId?: string
   category?: string
   explanation?: string
   points?: number

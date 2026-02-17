@@ -1,98 +1,158 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Save, X, ArrowLeft, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
-
-interface FAQ {
-  id: string;
-  order: number;
-  question: string;
-  answer: string;
-}
+import { Plus, Edit, Trash2, Save, X, ArrowLeft, HelpCircle, ArrowUp, ArrowDown, Loader2, Eye, EyeOff } from 'lucide-react';
+import { contentApi, FAQItem, FAQCreate, FAQUpdate } from '@/lib/api/content';
 
 export default function FAQsManager() {
   const params = useParams();
   const router = useRouter();
   const year = params?.year as string;
 
-  const [faqs, setFaqs] = useState<FAQ[]>([
-    {
-      id: '1',
-      order: 1,
-      question: "Qui peut participer ?",
-      answer: "Tout élève inscrit dans un établissement secondaire au Bénin, né après le 1er janvier 2007."
-    },
-    {
-      id: '2',
-      order: 2,
-      question: "Faut-il savoir coder ?",
-      answer: "Non, pas pour la première phase. La curiosité et un bon niveau en logique suffisent."
-    },
-    {
-      id: '3',
-      order: 3,
-      question: "L'inscription est-elle payante ?",
-      answer: "Non, la participation est entièrement gratuite."
-    }
-  ]);
-
+  const [faqs, setFaqs] = useState<FAQItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingFaq, setEditingFaq] = useState<FAQ | null>(null);
-  const [formData, setFormData] = useState<Partial<FAQ>>({
+  const [editingFaq, setEditingFaq] = useState<FAQItem | null>(null);
+  const [formData, setFormData] = useState<FAQCreate>({
     question: '',
-    answer: ''
+    answer: '',
+    category: '',
+    isPublished: true,
   });
+
+  useEffect(() => {
+    loadFAQs();
+  }, []);
+
+  const loadFAQs = async () => {
+    try {
+      setLoading(true);
+      const data = await contentApi.getFAQ({ publishedOnly: false });
+      setFaqs([...data].sort((a, b) => a.order - b.order));
+    } catch (error) {
+      console.error('Erreur lors du chargement des FAQs:', error);
+      alert('Erreur lors du chargement des FAQs');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAdd = () => {
     setIsEditing(true);
     setEditingFaq(null);
-    setFormData({ question: '', answer: '' });
+    setFormData({
+      question: '',
+      answer: '',
+      category: '',
+      isPublished: true,
+    });
   };
 
-  const handleEdit = (faq: FAQ) => {
+  const handleEdit = (faq: FAQItem) => {
     setIsEditing(true);
     setEditingFaq(faq);
-    setFormData(faq);
+    setFormData({
+      question: faq.question,
+      answer: faq.answer,
+      category: faq.category || '',
+      isPublished: faq.isPublished,
+    });
   };
 
-  const handleSave = () => {
-    if (editingFaq) {
-      setFaqs(faqs.map(f => f.id === editingFaq.id ? { ...formData, id: f.id, order: f.order } as FAQ : f));
-    } else {
-      const newFaq: FAQ = {
-        ...formData,
-        id: Date.now().toString(),
-        order: faqs.length + 1
-      } as FAQ;
-      setFaqs([...faqs, newFaq]);
+  const handleSave = async () => {
+    if (!formData.question.trim() || !formData.answer.trim()) {
+      alert('La question et la réponse sont obligatoires');
+      return;
     }
-    setIsEditing(false);
-    setEditingFaq(null);
+
+    setSaving(true);
+    try {
+      if (editingFaq) {
+        const update: FAQUpdate = {
+          question: formData.question.trim(),
+          answer: formData.answer.trim(),
+          category: formData.category?.trim() || undefined,
+          isPublished: formData.isPublished,
+        };
+        await contentApi.updateFAQ(editingFaq.id, update);
+      } else {
+        const create: FAQCreate = {
+          question: formData.question.trim(),
+          answer: formData.answer.trim(),
+          category: formData.category?.trim() || undefined,
+          order: faqs.length + 1,
+          isPublished: formData.isPublished,
+        };
+        await contentApi.createFAQ(create);
+      }
+      await loadFAQs();
+      setIsEditing(false);
+      setEditingFaq(null);
+    } catch (error: any) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      alert(error?.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette FAQ ?')) {
-      setFaqs(faqs.filter(f => f.id !== id));
+      try {
+        await contentApi.deleteFAQ(id);
+        await loadFAQs();
+      } catch (error: any) {
+        console.error('Erreur lors de la suppression:', error);
+        alert(error?.response?.data?.detail || 'Erreur lors de la suppression');
+      }
     }
   };
 
-  const moveFaq = (index: number, direction: 'up' | 'down') => {
-    const newFaqs = [...faqs];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-
-    if (targetIndex < 0 || targetIndex >= faqs.length) return;
-
-    [newFaqs[index], newFaqs[targetIndex]] = [newFaqs[targetIndex], newFaqs[index]];
-    newFaqs.forEach((faq, idx) => faq.order = idx + 1);
-
-    setFaqs(newFaqs);
+  const handleTogglePublished = async (faq: FAQItem) => {
+    try {
+      await contentApi.updateFAQ(faq.id, { isPublished: !faq.isPublished });
+      await loadFAQs();
+    } catch (error: any) {
+      console.error('Erreur:', error);
+    }
   };
 
   const handleCancel = () => {
     setIsEditing(false);
     setEditingFaq(null);
   };
+
+  const moveFaq = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= faqs.length) return;
+
+    const reordered = [...faqs];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    const withNewOrders = reordered.map((f, i) => ({ ...f, order: i + 1 }));
+    setFaqs(withNewOrders);
+
+    try {
+      await Promise.all(
+        withNewOrders.map(f => contentApi.updateFAQ(f.id, { order: f.order }))
+      );
+    } catch (error) {
+      console.error('Erreur lors du réordonnancement:', error);
+      await loadFAQs();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-ioai-blue mx-auto mb-4" />
+          <p className="text-gray-600">Chargement des FAQs...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -106,7 +166,7 @@ export default function FAQsManager() {
             Retour aux éditions
           </button>
           <h1 className="text-3xl font-display font-black text-gray-900">FAQs de l'édition {year}</h1>
-          <p className="text-gray-500 mt-2">Gérez les questions fréquentes des candidats</p>
+          <p className="text-gray-500 mt-2">{faqs.length} question{faqs.length !== 1 ? 's' : ''} — visible sur toutes les éditions</p>
         </div>
         <button
           onClick={handleAdd}
@@ -125,18 +185,45 @@ export default function FAQsManager() {
           </h2>
 
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                <HelpCircle className="inline w-4 h-4 mr-1" />
-                Question *
-              </label>
-              <input
-                type="text"
-                value={formData.question}
-                onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                placeholder="Qui peut participer ?"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  <HelpCircle className="inline w-4 h-4 mr-1" />
+                  Question *
+                </label>
+                <input
+                  type="text"
+                  value={formData.question}
+                  onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+                  placeholder="Qui peut participer ?"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Catégorie <span className="text-gray-400 font-normal">(optionnel)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  placeholder="Inscription, Épreuves, Résultats..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
+                />
+              </div>
+
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isPublished}
+                    onChange={(e) => setFormData({ ...formData, isPublished: e.target.checked })}
+                    className="w-5 h-5 rounded accent-ioai-green"
+                  />
+                  <span className="text-sm font-bold text-gray-700">Publié (visible sur le site)</span>
+                </label>
+              </div>
             </div>
 
             <div>
@@ -154,10 +241,20 @@ export default function FAQsManager() {
           <div className="flex gap-4 mt-8">
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all disabled:opacity-50"
             >
-              <Save size={20} />
-              Enregistrer
+              {saving ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Enregistrer
+                </>
+              )}
             </button>
             <button
               onClick={handleCancel}
@@ -172,23 +269,37 @@ export default function FAQsManager() {
 
       {/* Liste des FAQs */}
       <div className="space-y-4">
-        {faqs.sort((a, b) => a.order - b.order).map((faq, index) => (
+        {faqs.map((faq, index) => (
           <div
             key={faq.id}
-            className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-sm hover:shadow-lg transition-all"
+            className={`bg-white p-6 rounded-2xl border-2 shadow-sm hover:shadow-lg transition-all ${
+              faq.isPublished ? 'border-gray-200' : 'border-gray-200 opacity-60'
+            }`}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-start gap-3 mb-3">
                   <span className="text-lg font-bold text-gray-400 mt-1">#{faq.order}</span>
                   <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">{faq.question}</h3>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h3 className="text-lg font-bold text-gray-900">{faq.question}</h3>
+                      {faq.category && (
+                        <span className="px-2 py-0.5 bg-ioai-blue/10 text-ioai-blue text-xs font-semibold rounded-full">
+                          {faq.category}
+                        </span>
+                      )}
+                      {!faq.isPublished && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-full">
+                          Non publié
+                        </span>
+                      )}
+                    </div>
                     <p className="text-gray-700 leading-relaxed">{faq.answer}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-2 flex-shrink-0">
                 <div className="flex gap-1">
                   <button
                     onClick={() => moveFaq(index, 'up')}
@@ -205,6 +316,17 @@ export default function FAQsManager() {
                     <ArrowDown size={20} />
                   </button>
                 </div>
+                <button
+                  onClick={() => handleTogglePublished(faq)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    faq.isPublished
+                      ? 'text-green-600 hover:bg-green-50'
+                      : 'text-gray-400 hover:bg-gray-50'
+                  }`}
+                  title={faq.isPublished ? 'Dépublier' : 'Publier'}
+                >
+                  {faq.isPublished ? <Eye size={20} /> : <EyeOff size={20} />}
+                </button>
                 <button
                   onClick={() => handleEdit(faq)}
                   className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -225,7 +347,7 @@ export default function FAQsManager() {
         {faqs.length === 0 && !isEditing && (
           <div className="bg-white p-12 rounded-2xl border-2 border-dashed border-gray-300 text-center">
             <HelpCircle size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500">Aucune FAQ créée pour cette édition.</p>
+            <p className="text-gray-500">Aucune FAQ créée pour le moment.</p>
           </div>
         )}
       </div>

@@ -1,17 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Save, X, ArrowLeft, Upload, Quote, Medal } from 'lucide-react';
-
-interface TeamMember {
-  id: string;
-  name: string;
-  school: string;
-  role: string;
-  quote: string;
-  image: string;
-}
+import { Plus, Edit, Trash2, Save, X, ArrowLeft, Upload, Quote, Medal, Loader2 } from 'lucide-react';
+import { contentApi, PastEdition, Testimonial } from '@/lib/api/content';
 
 async function uploadImage(file: File, folder: string): Promise<string | null> {
   const formData = new FormData();
@@ -31,41 +23,65 @@ async function uploadImage(file: File, folder: string): Promise<string | null> {
 export default function GererEquipe() {
   const params = useParams();
   const router = useRouter();
-  const slug = params?.slug as string;
+  const editionId = params?.slug as string;
 
-  const [members, setMembers] = useState<TeamMember[]>([
-    {
-      id: '1',
-      name: "Merveille Agbossaga",
-      school: "Lycée Militaire de Jeunes Filles",
-      role: "Mention Honorable",
-      quote: "Représenter le Bénin à Beijing m'a prouvé que nous avons notre place.",
-      image: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?q=80&w=400"
-    }
-  ]);
-
+  const [edition, setEdition] = useState<PastEdition | null>(null);
+  const [members, setMembers] = useState<Testimonial[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-  const [formData, setFormData] = useState<Partial<TeamMember>>({
-    name: '',
+  const [editingMember, setEditingMember] = useState<Testimonial | null>(null);
+  const [formData, setFormData] = useState<{
+    studentName: string;
+    school: string;
+    role: string;
+    quote: string;
+    imageUrl: string;
+  }>({
+    studentName: '',
     school: '',
     role: '',
     quote: '',
-    image: ''
+    imageUrl: ''
   });
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadEdition();
+  }, [editionId]);
+
+  const loadEdition = async () => {
+    try {
+      setLoading(true);
+      const data = await contentApi.getPastEdition(editionId);
+      setEdition(data);
+      setMembers(data.testimonials || []);
+    } catch (error) {
+      console.error('Erreur lors du chargement de l\'édition:', error);
+      alert('Erreur lors du chargement de l\'édition');
+      router.push('/admin/contenu/bilans');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAdd = () => {
     setIsEditing(true);
     setEditingMember(null);
-    setFormData({ name: '', school: '', role: '', quote: '', image: '' });
+    setFormData({ studentName: '', school: '', role: '', quote: '', imageUrl: '' });
   };
 
-  const handleEdit = (member: TeamMember) => {
+  const handleEdit = (member: Testimonial) => {
     setIsEditing(true);
     setEditingMember(member);
-    setFormData(member);
+    setFormData({
+      studentName: member.studentName,
+      school: member.school || '',
+      role: member.role || '',
+      quote: member.quote,
+      imageUrl: member.imageUrl || ''
+    });
   };
 
   const handleImageFileChange = async (
@@ -83,7 +99,7 @@ export default function GererEquipe() {
         setUploadError("Impossible d'uploader la photo. Réessayez.");
         return;
       }
-      setFormData((prev) => ({ ...prev, image: url }));
+      setFormData((prev) => ({ ...prev, imageUrl: url }));
     } catch (error) {
       console.error(error);
       setUploadError("Erreur lors de l'upload de la photo.");
@@ -92,23 +108,51 @@ export default function GererEquipe() {
     }
   };
 
-  const handleSave = () => {
-    if (editingMember) {
-      setMembers(members.map(m => m.id === editingMember.id ? { ...formData, id: m.id } as TeamMember : m));
-    } else {
-      const newMember: TeamMember = {
-        ...formData,
-        id: Date.now().toString()
-      } as TeamMember;
-      setMembers([...members, newMember]);
+  const handleSave = async () => {
+    if (!formData.studentName.trim() || !formData.quote.trim()) {
+      alert('Le nom et le témoignage sont obligatoires');
+      return;
     }
-    setIsEditing(false);
-    setEditingMember(null);
+
+    setSaving(true);
+    try {
+      if (editingMember) {
+        await contentApi.updateTestimonial(editionId, editingMember.id, {
+          studentName: formData.studentName,
+          quote: formData.quote,
+          school: formData.school || undefined,
+          role: formData.role || undefined,
+          imageUrl: formData.imageUrl || undefined
+        });
+      } else {
+        await contentApi.createTestimonial(editionId, {
+          studentName: formData.studentName,
+          quote: formData.quote,
+          school: formData.school || undefined,
+          role: formData.role || undefined,
+          imageUrl: formData.imageUrl || undefined
+        });
+      }
+      await loadEdition();
+      setIsEditing(false);
+      setEditingMember(null);
+    } catch (error: any) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      alert(error?.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce membre ?')) {
-      setMembers(members.filter(m => m.id !== id));
+      try {
+        await contentApi.deleteTestimonial(editionId, id);
+        await loadEdition();
+      } catch (error: any) {
+        console.error('Erreur lors de la suppression:', error);
+        alert(error?.response?.data?.detail || 'Erreur lors de la suppression');
+      }
     }
   };
 
@@ -116,6 +160,27 @@ export default function GererEquipe() {
     setIsEditing(false);
     setEditingMember(null);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-ioai-blue mx-auto mb-4" />
+          <p className="text-gray-600">Chargement de l'équipe...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!edition) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-gray-600">Édition introuvable</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -128,33 +193,23 @@ export default function GererEquipe() {
             <ArrowLeft size={20} />
             Retour au bilan
           </button>
-          <h1 className="text-3xl font-display font-black text-gray-900">Équipe nationale - {slug}</h1>
-          <p className="text-gray-500 mt-2">Gérez les 4 finalistes qui ont représenté le Bénin</p>
+          <h1 className="text-3xl font-display font-black text-gray-900">Équipe nationale - Édition {edition.year}</h1>
+          <p className="text-gray-500 mt-2">{members.length} participant{members.length !== 1 ? 's' : ''} ajouté{members.length !== 1 ? 's' : ''}</p>
         </div>
-        {members.length < 4 && (
-          <button
-            onClick={handleAdd}
-            className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all shadow-lg hover:shadow-xl"
-          >
-            <Plus size={20} />
-            Ajouter un membre
-          </button>
-        )}
+        <button
+          onClick={handleAdd}
+          className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all shadow-lg hover:shadow-xl"
+        >
+          <Plus size={20} />
+          Ajouter un participant
+        </button>
       </div>
-
-      {members.length >= 4 && (
-        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4">
-          <p className="text-green-800 text-sm">
-            ✅ <strong>Équipe complète !</strong> Les 4 finalistes ont été ajoutés.
-          </p>
-        </div>
-      )}
 
       {/* Formulaire */}
       {isEditing && (
         <div className="bg-white p-8 rounded-2xl border-2 border-ioai-green shadow-xl">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            {editingMember ? 'Modifier le membre' : 'Nouveau membre'}
+            {editingMember ? 'Modifier le participant' : 'Nouveau participant'}
           </h2>
 
           <div className="space-y-6">
@@ -163,8 +218,8 @@ export default function GererEquipe() {
                 <label className="block text-sm font-bold text-gray-700 mb-2">Nom complet *</label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.studentName}
+                  onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
                   placeholder="Merveille Agbossaga"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
@@ -185,13 +240,13 @@ export default function GererEquipe() {
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 <Medal className="inline w-4 h-4 mr-1" />
-                Rôle / Distinction *
+                Rôle / Distinction <span className="text-gray-400 font-normal">(optionnel)</span>
               </label>
               <input
                 type="text"
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                placeholder="Mention Honorable / Finaliste National / Médaille d'Or..."
+                placeholder="Mention Honorable, Finaliste National, Médaille d'Or..."
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
               />
             </div>
@@ -230,11 +285,11 @@ export default function GererEquipe() {
                 )}
               </div>
 
-              {formData.image && (
+              {formData.imageUrl && (
                 <div className="mt-2">
                   <p className="text-sm text-gray-600 mb-2">Aperçu :</p>
                   <img
-                    src={formData.image}
+                    src={formData.imageUrl}
                     alt="Preview"
                     className="w-32 h-32 object-cover rounded-xl border-2 border-gray-200"
                   />
@@ -246,10 +301,20 @@ export default function GererEquipe() {
           <div className="flex gap-4 mt-8">
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all disabled:opacity-50"
             >
-              <Save size={20} />
-              Enregistrer
+              {saving ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Enregistrer
+                </>
+              )}
             </button>
             <button
               onClick={handleCancel}
@@ -269,22 +334,28 @@ export default function GererEquipe() {
             key={member.id}
             className="bg-white rounded-2xl border-2 border-gray-200 shadow-sm hover:shadow-lg transition-all overflow-hidden"
           >
-            <div className="relative h-64">
-              <img
-                src={member.image}
-                alt={member.name}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute top-4 right-4">
-                <span className="px-3 py-1 bg-ioai-green text-white text-xs font-bold rounded-full shadow-lg">
-                  {member.role}
-                </span>
+            {member.imageUrl && (
+              <div className="relative h-64">
+                <img
+                  src={member.imageUrl}
+                  alt={member.studentName}
+                  className="w-full h-full object-cover"
+                />
+                {member.role && (
+                  <div className="absolute top-4 right-4">
+                    <span className="px-3 py-1 bg-ioai-green text-white text-xs font-bold rounded-full shadow-lg">
+                      {member.role}
+                    </span>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             <div className="p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-1">{member.name}</h3>
-              <p className="text-sm text-gray-600 mb-4">{member.school}</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-1">{member.studentName}</h3>
+              {member.school && (
+                <p className="text-sm text-gray-600 mb-4">{member.school}</p>
+              )}
 
               <div className="relative bg-gray-50 p-4 rounded-xl mb-4">
                 <Quote className="absolute top-2 left-2 w-6 h-6 text-ioai-green/20" />
@@ -314,18 +385,10 @@ export default function GererEquipe() {
         {members.length === 0 && !isEditing && (
           <div className="md:col-span-2 bg-white p-12 rounded-2xl border-2 border-dashed border-gray-300 text-center">
             <Medal size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500 mb-4">Aucun membre ajouté. Commencez par ajouter les 4 finalistes.</p>
+            <p className="text-gray-500 mb-4">Aucun participant ajouté pour le moment.</p>
           </div>
         )}
       </div>
-
-      {members.length > 0 && members.length < 4 && (
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4">
-          <p className="text-yellow-800 text-sm">
-            ⚠️ <strong>Équipe incomplète :</strong> Il manque {4 - members.length} membre(s) pour former l'équipe de 4 finalistes.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

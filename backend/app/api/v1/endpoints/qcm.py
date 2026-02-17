@@ -67,9 +67,11 @@ async def create_question(
     """
     new_question = QCMQuestion(
         question=question.question,
-        options=question.options,
-        correct_answer=question.correct_answer,
+        options=[opt.model_dump() for opt in question.options],
+        correct_answers=question.correct_answers,
+        is_multiple_answer=question.is_multiple_answer,
         difficulty=question.difficulty,
+        category_id=question.category_id,
         category=question.category,
         explanation=question.explanation,
         points=question.points,
@@ -102,9 +104,11 @@ async def bulk_create_questions(
         try:
             new_question = QCMQuestion(
                 question=question.question,
-                options=question.options,
-                correct_answer=question.correct_answer,
+                options=[opt.model_dump() for opt in question.options],
+                correct_answers=question.correct_answers,
+                is_multiple_answer=question.is_multiple_answer,
                 difficulty=question.difficulty,
+                category_id=question.category_id,
                 category=question.category,
                 explanation=question.explanation,
                 points=question.points,
@@ -154,6 +158,7 @@ async def update_question(
     # Mise à jour des champs
     update_data = question_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
+        # Les QuestionOption sont déjà sérialisés en dict par model_dump
         setattr(question, field, value)
 
     db.commit()

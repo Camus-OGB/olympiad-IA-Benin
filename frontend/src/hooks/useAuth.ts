@@ -12,7 +12,11 @@ export const useAuth = () => {
 
   useEffect(() => {
     // Attendre que l'hydratation soit complète avant de vérifier l'auth
-    if (!hasHydrated) return
+    if (!hasHydrated) {
+      console.log('useAuth - Waiting for hydration...');
+      setLoading(true);
+      return;
+    }
 
     // Vérifier si l'utilisateur est connecté en appelant /auth/me
     // Le cookie sera envoyé automatiquement

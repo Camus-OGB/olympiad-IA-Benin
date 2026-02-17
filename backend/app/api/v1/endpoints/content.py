@@ -6,10 +6,13 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
 import json
+from datetime import datetime
 
 from app.db.session import get_db
 from app.models.user import User
-from app.models.content import News, FAQ, Edition, PastEdition, Partner, Page
+from app.models.content import News, FAQ, Edition, PastEdition, Partner, Page, TimelinePhase, PastTimelinePhase, GalleryImage, Testimonial
+from app.models.general_testimonial import GeneralTestimonial
+from app.models.candidate_profile import CandidateProfile
 from app.schemas.content import (
     NewsCreate,
     NewsUpdate,
@@ -28,12 +31,54 @@ from app.schemas.content import (
     PartnerResponse,
     PageCreate,
     PageUpdate,
-    PageResponse
+    PageResponse,
+    NextDeadlineResponse,
+    GeneralTestimonialCreate,
+    GeneralTestimonialUpdate,
+    GeneralTestimonialResponse,
+    TimelinePhaseCreate,
+    TimelinePhaseResponse,
+    PastTimelinePhaseCreate,
+    PastTimelinePhaseResponse,
+    GalleryImageCreate,
+    GalleryImageResponse,
+    TestimonialCreate,
+    TestimonialResponse
 )
 from app.utils.deps import get_current_admin
+from app.utils.audit import log_audit
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# ==================== STATS PUBLIQUES ====================
+
+@router.get("/public-stats")
+async def get_public_stats(request: Request, db: Session = Depends(get_db)):
+    """
+    Statistiques publiques pour le site vitrine
+    - Nombre total de candidats inscrits
+    - Nombre de candidats vérifiés
+    """
+    cache_key = "content:public-stats"
+    cached = await _cache_get(request, cache_key)
+    if cached is not None:
+        return cached
+
+    total_candidates = db.query(CandidateProfile).count()
+    verified_candidates = db.query(CandidateProfile).join(User).filter(
+        User.is_verified == True
+    ).count()
+
+    payload = {
+        "total_candidates": total_candidates,
+        "verified_candidates": verified_candidates
+    }
+
+    # Cache pendant 2 minutes
+    await _cache_set(request, cache_key, payload, ttl_seconds=120)
+    return payload
 
 
 async def _cache_get(request: Request, key: str):
@@ -155,6 +200,8 @@ async def create_news(
         news.published_at = datetime.utcnow().isoformat()
 
     db.add(news)
+    log_audit(db=db, admin=current_admin, action="create_news", resource_type="news",
+              resource_label=news.title, request=request)
     db.commit()
     db.refresh(news)
 
@@ -194,6 +241,8 @@ async def update_news(
     if news.is_published and not news.published_at:
         news.published_at = datetime.utcnow().isoformat()
 
+    log_audit(db=db, admin=current_admin, action="update_news", resource_type="news",
+              resource_id=news_id, resource_label=news.title, request=request)
     db.commit()
     db.refresh(news)
 
@@ -222,6 +271,8 @@ async def delete_news(
             detail="Actualité non trouvée"
         )
 
+    log_audit(db=db, admin=current_admin, action="delete_news", resource_type="news",
+              resource_id=news_id, resource_label=news.title, request=request)
     db.delete(news)
     db.commit()
 
@@ -373,6 +424,96 @@ async def get_active_edition(request: Request, db: Session = Depends(get_db)):
     return payload
 
 
+@router.get("/editions/active/next-deadline", response_model=Optional[NextDeadlineResponse])
+async def get_next_deadline(request: Request, db: Session = Depends(get_db)):
+    """
+    Récupérer la prochaine deadline pour le compte à rebours du site vitrine
+
+    Retourne:
+    - La prochaine phase qui va démarrer (start_date futur)
+    - OU la phase en cours avec sa date de fin (is_current=True avec end_date futur)
+    - None si aucune phase future/en cours
+    """
+    cache_key = "content:editions:next-deadline"
+    cached = await _cache_get(request, cache_key)
+    if cached is not None:
+        return cached
+
+    # Récupérer l'édition active
+    edition = db.query(Edition).filter(Edition.is_active == True).first()
+    if not edition:
+        await _cache_set(request, cache_key, None, ttl_seconds=60)
+        return None
+
+    now = datetime.utcnow()
+
+    # Chercher la phase en cours (is_current=True)
+    current_phase = db.query(TimelinePhase).filter(
+        TimelinePhase.edition_id == edition.id,
+        TimelinePhase.is_current == True
+    ).first()
+
+    # Chercher la prochaine phase à venir (start_date dans le futur)
+    future_phases = db.query(TimelinePhase).filter(
+        TimelinePhase.edition_id == edition.id,
+        TimelinePhase.start_date.isnot(None)
+    ).order_by(TimelinePhase.phase_order).all()
+
+    next_phase = None
+    target_date = None
+    target_type = None
+
+    # Vérifier si une phase en cours a une date de fin dans le futur
+    if current_phase and current_phase.end_date:
+        try:
+            end_dt = datetime.fromisoformat(current_phase.end_date.replace('Z', '+00:00'))
+            if end_dt > now:
+                next_phase = current_phase
+                target_date = current_phase.end_date
+                target_type = "end"
+        except (ValueError, AttributeError):
+            pass
+
+    # Sinon, chercher la prochaine phase à démarrer
+    if not next_phase:
+        for phase in future_phases:
+            if not phase.start_date:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(phase.start_date.replace('Z', '+00:00'))
+                if start_dt > now:
+                    next_phase = phase
+                    target_date = phase.start_date
+                    target_type = "start"
+                    break
+            except (ValueError, AttributeError):
+                continue
+
+    # Pas de deadline trouvée
+    if not next_phase or not target_date:
+        await _cache_set(request, cache_key, None, ttl_seconds=60)
+        return None
+
+    # Construire la réponse
+    response = {
+        "phase_title": next_phase.title,
+        "phase_description": next_phase.description,
+        "target_date": target_date,
+        "target_type": target_type,
+        "current_phase": {
+            "title": current_phase.title,
+            "is_active": True,
+            "start_date": current_phase.start_date,
+            "end_date": current_phase.end_date
+        } if current_phase and current_phase.id != next_phase.id else None,
+        "edition_year": edition.year
+    }
+
+    # Cache pendant 5 minutes
+    await _cache_set(request, cache_key, response, ttl_seconds=300)
+    return response
+
+
 @router.get("/editions", response_model=List[EditionResponse])
 async def list_editions(
     request: Request,
@@ -445,6 +586,8 @@ async def create_edition(
 
     edition = Edition(**edition_data.model_dump())
     db.add(edition)
+    log_audit(db=db, admin=current_admin, action="create_edition", resource_type="edition",
+              resource_label=edition_data.title, details={"year": edition_data.year}, request=request)
     db.commit()
     db.refresh(edition)
 
@@ -482,12 +625,117 @@ async def update_edition(
     for field, value in update_data.items():
         setattr(edition, field, value)
 
+    log_audit(db=db, admin=current_admin, action="update_edition", resource_type="edition",
+              resource_id=edition_id, resource_label=edition.title, request=request)
     db.commit()
     db.refresh(edition)
 
     if request is not None:
         await _cache_invalidate_prefix(request, "content:editions:")
     return edition
+
+
+# ==================== PHASES DE L'ÉDITION ACTIVE ====================
+
+@router.post(
+    "/editions/{edition_id}/phases",
+    response_model=TimelinePhaseResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Créer une phase pour une édition"
+)
+def create_edition_phase(
+    edition_id: str,
+    phase: TimelinePhaseCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Créer une nouvelle phase de timeline pour une édition"""
+    edition = db.query(Edition).filter(Edition.id == edition_id).first()
+    if not edition:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Édition non trouvée")
+
+    new_phase = TimelinePhase(
+        edition_id=edition_id,
+        phase_order=phase.phase_order,
+        title=phase.title,
+        description=phase.description,
+        start_date=phase.start_date,
+        end_date=phase.end_date,
+        is_current=phase.is_current
+    )
+
+    # Si is_current=True, désactiver les autres phases courantes
+    if phase.is_current:
+        db.query(TimelinePhase).filter(TimelinePhase.edition_id == edition_id).update({TimelinePhase.is_current: False})
+
+    db.add(new_phase)
+    db.commit()
+    db.refresh(new_phase)
+    return new_phase
+
+
+@router.put(
+    "/editions/{edition_id}/phases/{phase_id}",
+    response_model=TimelinePhaseResponse,
+    summary="Mettre à jour une phase"
+)
+def update_edition_phase(
+    edition_id: str,
+    phase_id: str,
+    phase: TimelinePhaseCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Mettre à jour une phase de timeline"""
+    db_phase = db.query(TimelinePhase).filter(
+        TimelinePhase.id == phase_id,
+        TimelinePhase.edition_id == edition_id
+    ).first()
+
+    if not db_phase:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phase non trouvée")
+
+    # Si is_current=True, désactiver les autres phases courantes
+    if phase.is_current:
+        db.query(TimelinePhase).filter(
+            TimelinePhase.edition_id == edition_id,
+            TimelinePhase.id != phase_id
+        ).update({TimelinePhase.is_current: False})
+
+    db_phase.phase_order = phase.phase_order
+    db_phase.title = phase.title
+    db_phase.description = phase.description
+    db_phase.start_date = phase.start_date
+    db_phase.end_date = phase.end_date
+    db_phase.is_current = phase.is_current
+
+    db.commit()
+    db.refresh(db_phase)
+    return db_phase
+
+
+@router.delete(
+    "/editions/{edition_id}/phases/{phase_id}",
+    summary="Supprimer une phase"
+)
+def delete_edition_phase(
+    edition_id: str,
+    phase_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Supprimer une phase de timeline"""
+    db_phase = db.query(TimelinePhase).filter(
+        TimelinePhase.id == phase_id,
+        TimelinePhase.edition_id == edition_id
+    ).first()
+
+    if not db_phase:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phase non trouvée")
+
+    db.delete(db_phase)
+    db.commit()
+    return {"message": "Phase supprimée"}
 
 
 # ==================== ÉDITIONS PASSÉES ====================
@@ -541,6 +789,8 @@ async def create_past_edition(
     """
     edition = PastEdition(**edition_data.model_dump())
     db.add(edition)
+    log_audit(db=db, admin=current_admin, action="create_past_edition", resource_type="past_edition",
+              resource_label=getattr(edition_data, 'title', str(edition_data.year)))
     db.commit()
     db.refresh(edition)
 
@@ -571,6 +821,8 @@ async def update_past_edition(
     for field, value in update_data.items():
         setattr(edition, field, value)
 
+    log_audit(db=db, admin=current_admin, action="update_past_edition", resource_type="past_edition",
+              resource_id=edition_id, resource_label=getattr(edition, 'title', str(edition.year)))
     db.commit()
     db.refresh(edition)
 
@@ -784,3 +1036,423 @@ async def delete_page(
     db.commit()
 
     return {"message": "Page supprimée avec succès"}
+
+
+# ==================== PAST EDITION TIMELINE PHASES ====================
+
+@router.post(
+    "/past-editions/{edition_id}/timeline",
+    response_model=PastTimelinePhaseResponse,
+    summary="Créer une phase de timeline pour une édition passée"
+)
+def create_timeline_phase(
+    edition_id: str,
+    phase: PastTimelinePhaseCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Créer une nouvelle phase de timeline pour une édition passée"""
+    # Vérifier que l'édition existe
+    edition = db.query(PastEdition).filter(
+        PastEdition.id == edition_id
+    ).first()
+
+    if not edition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Édition passée non trouvée"
+        )
+
+    # Créer la phase
+    new_phase = PastTimelinePhase(
+        past_edition_id=edition_id,
+        phase_order=phase.phase_order,
+        title=phase.title,
+        description=phase.description,
+        date=phase.date
+    )
+
+    db.add(new_phase)
+    db.commit()
+    db.refresh(new_phase)
+
+    return new_phase
+
+
+@router.put(
+    "/past-editions/{edition_id}/timeline/{phase_id}",
+    response_model=PastTimelinePhaseResponse,
+    summary="Mettre à jour une phase de timeline"
+)
+def update_timeline_phase(
+    edition_id: str,
+    phase_id: str,
+    phase: PastTimelinePhaseCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Mettre à jour une phase de timeline existante"""
+    db_phase = db.query(PastTimelinePhase).filter(
+        PastTimelinePhase.id == phase_id,
+        PastTimelinePhase.past_edition_id == edition_id
+    ).first()
+
+    if not db_phase:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phase de timeline non trouvée"
+        )
+
+    # Mettre à jour les champs
+    db_phase.phase_order = phase.phase_order
+    db_phase.title = phase.title
+    db_phase.description = phase.description
+    db_phase.date = phase.date
+
+    db.commit()
+    db.refresh(db_phase)
+
+    return db_phase
+
+
+@router.delete(
+    "/past-editions/{edition_id}/timeline/{phase_id}",
+    summary="Supprimer une phase de timeline"
+)
+def delete_timeline_phase(
+    edition_id: str,
+    phase_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Supprimer une phase de timeline"""
+    db_phase = db.query(PastTimelinePhase).filter(
+        PastTimelinePhase.id == phase_id,
+        PastTimelinePhase.past_edition_id == edition_id
+    ).first()
+
+    if not db_phase:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phase de timeline non trouvée"
+        )
+
+    db.delete(db_phase)
+    db.commit()
+
+    return {"message": "Phase de timeline supprimée avec succès"}
+
+
+
+# ==================== PAST EDITION GALLERY IMAGES ====================
+
+@router.post(
+    "/past-editions/{edition_id}/gallery",
+    response_model=GalleryImageResponse,
+    summary="Ajouter une image à la galerie"
+)
+def create_gallery_image(
+    edition_id: str,
+    image: GalleryImageCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Ajouter une nouvelle image à la galerie d'une édition passée"""
+    edition = db.query(PastEdition).filter(
+        PastEdition.id == edition_id
+    ).first()
+
+    if not edition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Édition passée non trouvée"
+        )
+
+    new_image = GalleryImage(
+        past_edition_id=edition_id,
+        image_url=image.image_url,
+        caption=image.caption,
+        order=image.order
+    )
+
+    db.add(new_image)
+    db.commit()
+    db.refresh(new_image)
+
+    return new_image
+
+
+@router.put(
+    "/past-editions/{edition_id}/gallery/{image_id}",
+    response_model=GalleryImageResponse,
+    summary="Mettre à jour une image de galerie"
+)
+def update_gallery_image(
+    edition_id: str,
+    image_id: str,
+    image: GalleryImageCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Mettre à jour une image de galerie existante"""
+    db_image = db.query(GalleryImage).filter(
+        GalleryImage.id == image_id,
+        GalleryImage.past_edition_id == edition_id
+    ).first()
+
+    if not db_image:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image de galerie non trouvée"
+        )
+
+    db_image.image_url = image.image_url
+    db_image.caption = image.caption
+    db_image.order = image.order
+
+    db.commit()
+    db.refresh(db_image)
+
+    return db_image
+
+
+@router.delete(
+    "/past-editions/{edition_id}/gallery/{image_id}",
+    summary="Supprimer une image de galerie"
+)
+def delete_gallery_image(
+    edition_id: str,
+    image_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Supprimer une image de galerie"""
+    db_image = db.query(GalleryImage).filter(
+        GalleryImage.id == image_id,
+        GalleryImage.past_edition_id == edition_id
+    ).first()
+
+    if not db_image:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image de galerie non trouvée"
+        )
+
+    db.delete(db_image)
+    db.commit()
+
+    return {"message": "Image de galerie supprimée avec succès"}
+
+
+# ==================== PAST EDITION TESTIMONIALS ====================
+
+@router.post(
+    "/past-editions/{edition_id}/testimonials",
+    response_model=TestimonialResponse,
+    summary="Créer un témoignage"
+)
+def create_testimonial(
+    edition_id: str,
+    testimonial: TestimonialCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Créer un nouveau témoignage pour une édition passée"""
+    edition = db.query(PastEdition).filter(
+        PastEdition.id == edition_id
+    ).first()
+
+    if not edition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Édition passée non trouvée"
+        )
+
+    new_testimonial = Testimonial(
+        past_edition_id=edition_id,
+        student_name=testimonial.student_name,
+        school=testimonial.school,
+        role=testimonial.role,
+        quote=testimonial.quote,
+        image_url=testimonial.image_url
+    )
+
+    db.add(new_testimonial)
+    db.commit()
+    db.refresh(new_testimonial)
+
+    return new_testimonial
+
+
+@router.put(
+    "/past-editions/{edition_id}/testimonials/{testimonial_id}",
+    response_model=TestimonialResponse,
+    summary="Mettre à jour un témoignage"
+)
+def update_testimonial(
+    edition_id: str,
+    testimonial_id: str,
+    testimonial: TestimonialCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Mettre à jour un témoignage existant"""
+    db_testimonial = db.query(Testimonial).filter(
+        Testimonial.id == testimonial_id,
+        Testimonial.past_edition_id == edition_id
+    ).first()
+
+    if not db_testimonial:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Témoignage non trouvé"
+        )
+
+    db_testimonial.student_name = testimonial.student_name
+    db_testimonial.school = testimonial.school
+    db_testimonial.role = testimonial.role
+    db_testimonial.quote = testimonial.quote
+    db_testimonial.image_url = testimonial.image_url
+
+    db.commit()
+    db.refresh(db_testimonial)
+
+    return db_testimonial
+
+
+@router.delete(
+    "/past-editions/{edition_id}/testimonials/{testimonial_id}",
+    summary="Supprimer un témoignage"
+)
+def delete_testimonial(
+    edition_id: str,
+    testimonial_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Supprimer un témoignage"""
+    db_testimonial = db.query(Testimonial).filter(
+        Testimonial.id == testimonial_id,
+        Testimonial.past_edition_id == edition_id
+    ).first()
+
+    if not db_testimonial:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Témoignage non trouvé"
+        )
+
+    db.delete(db_testimonial)
+    db.commit()
+
+    return {"message": "Témoignage supprimé avec succès"}
+
+
+# ==================== GENERAL TESTIMONIALS ====================
+
+@router.get(
+    "/general-testimonials",
+    response_model=List[GeneralTestimonialResponse],
+    summary="Récupérer tous les témoignages généraux"
+)
+def get_general_testimonials(
+    published_only: bool = Query(True, description="Filtrer uniquement les témoignages publiés"),
+    db: Session = Depends(get_db)
+):
+    """Récupérer tous les témoignages généraux (mentors, parents, sponsors, etc.)"""
+    query = db.query(GeneralTestimonial)
+    
+    if published_only:
+        query = query.filter(GeneralTestimonial.is_published == True)
+    
+    testimonials = query.order_by(GeneralTestimonial.display_order).all()
+    return testimonials
+
+
+@router.post(
+    "/general-testimonials",
+    response_model=GeneralTestimonialResponse,
+    summary="Créer un témoignage général"
+)
+def create_general_testimonial(
+    testimonial: GeneralTestimonialCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Créer un nouveau témoignage général"""
+    new_testimonial = GeneralTestimonial(
+        author_name=testimonial.author_name,
+        author_role=testimonial.author_role,
+        author_type=testimonial.author_type,
+        content=testimonial.content,
+        photo_url=testimonial.photo_url,
+        video_url=testimonial.video_url,
+        organization=testimonial.organization,
+        display_order=testimonial.display_order,
+        is_published=testimonial.is_published
+    )
+    
+    db.add(new_testimonial)
+    db.commit()
+    db.refresh(new_testimonial)
+    
+    return new_testimonial
+
+
+@router.put(
+    "/general-testimonials/{testimonial_id}",
+    response_model=GeneralTestimonialResponse,
+    summary="Mettre à jour un témoignage général"
+)
+def update_general_testimonial(
+    testimonial_id: str,
+    testimonial: GeneralTestimonialUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Mettre à jour un témoignage général existant"""
+    db_testimonial = db.query(GeneralTestimonial).filter(
+        GeneralTestimonial.id == testimonial_id
+    ).first()
+    
+    if not db_testimonial:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Témoignage non trouvé"
+        )
+    
+    # Mettre à jour les champs fournis
+    update_data = testimonial.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_testimonial, field, value)
+    
+    db.commit()
+    db.refresh(db_testimonial)
+    
+    return db_testimonial
+
+
+@router.delete(
+    "/general-testimonials/{testimonial_id}",
+    summary="Supprimer un témoignage général"
+)
+def delete_general_testimonial(
+    testimonial_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Supprimer un témoignage général"""
+    db_testimonial = db.query(GeneralTestimonial).filter(
+        GeneralTestimonial.id == testimonial_id
+    ).first()
+    
+    if not db_testimonial:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Témoignage non trouvé"
+        )
+    
+    db.delete(db_testimonial)
+    db.commit()
+    
+    return {"message": "Témoignage général supprimé avec succès"}

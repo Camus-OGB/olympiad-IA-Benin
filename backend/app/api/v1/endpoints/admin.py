@@ -2,7 +2,7 @@
 Endpoints pour l'espace administrateur - Section 4: Espace Administrateur
 Adaptés à la structure 3FN
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 from typing import List, Optional
@@ -23,6 +23,9 @@ from app.schemas.admin import (
     BulkStatusUpdateRequest
 )
 from app.utils.deps import get_current_admin
+from app.utils.audit import log_audit
+from app.models.audit_log import AuditLog
+from app.schemas.admin import AuditLogResponse
 from app.services.email_service import send_notification_email
 from app.services.storage_service import StorageService
 
@@ -44,8 +47,10 @@ async def get_dashboard_stats(
     - Nombre de candidats vérifiés
     - Nombre de QCM complétés
     - Répartition par région (basé sur la table School)
+    - Répartition par genre (male, female, unspecified)
     - Score moyen au QCM
     - Répartition par statut
+    - Inscriptions récentes (7 derniers jours)
     """
     # Nombre total de candidats
     total_candidates = db.query(CandidateProfile).count()
@@ -90,6 +95,22 @@ async def get_dashboard_stats(
         ).count()
         candidates_by_status[candidate_status.value] = count
 
+    # Répartition par genre
+    from app.models.candidate_profile import Gender
+    candidates_by_gender = {}
+    for gender in Gender:
+        count = db.query(CandidateProfile).filter(
+            CandidateProfile.gender == gender
+        ).count()
+        candidates_by_gender[gender.value] = count
+
+    # Compter les candidats sans genre spécifié
+    no_gender_count = db.query(CandidateProfile).filter(
+        CandidateProfile.gender.is_(None)
+    ).count()
+    if no_gender_count > 0:
+        candidates_by_gender["unspecified"] = no_gender_count
+
     # Candidats récemment inscrits (7 derniers jours)
     from datetime import timedelta
     seven_days_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
@@ -103,6 +124,7 @@ async def get_dashboard_stats(
         "qcm_completed": qcm_completed,
         "candidates_by_region": candidates_by_region,
         "candidates_by_status": candidates_by_status,
+        "candidates_by_gender": candidates_by_gender,
         "qcm_average_score": round(qcm_average_score, 2) if qcm_average_score else None,
         "recent_registrations": recent_registrations
     }
@@ -113,7 +135,7 @@ async def list_candidates(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100000),  # Augmenté pour permettre l'export complet des données
     candidate_status: Optional[CandidateStatus] = None,
     search: Optional[str] = None,
     sort_by: str = Query("created_at", regex="^(created_at|qcm_score|status)$"),
@@ -296,6 +318,7 @@ async def get_bulletin_signed_url(
 async def update_candidate_status(
     candidate_id: str,
     request: UpdateCandidateStatusRequest,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -323,8 +346,18 @@ async def update_candidate_status(
 
     # Ajouter une note si fournie
     if request.note:
-        # Dans une version complète, on sauvegarderait ceci dans une table d'historique
         logger.info(f"Note pour candidat {candidate_id}: {request.note}")
+
+    candidate_name = f"{profile.user.first_name} {profile.user.last_name}" if profile.user else candidate_id
+    log_audit(
+        db=db, admin=current_admin,
+        action="update_candidate_status",
+        resource_type="candidate",
+        resource_id=candidate_id,
+        resource_label=candidate_name,
+        details={"old_status": old_status.value if old_status else None, "new_status": request.new_status.value, "note": request.note},
+        request=http_request,
+    )
 
     db.commit()
     db.refresh(profile)
@@ -369,6 +402,7 @@ async def update_candidate_status(
 @router.post("/candidates/bulk-update-status")
 async def bulk_update_status(
     request: BulkStatusUpdateRequest,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -408,6 +442,14 @@ async def bulk_update_status(
                     )
                 except Exception as e:
                     logger.error(f"Erreur envoi notification pour {candidate_id}: {str(e)}")
+
+    log_audit(
+        db=db, admin=current_admin,
+        action="bulk_update_status",
+        resource_type="candidate",
+        details={"candidate_ids": request.candidate_ids, "new_status": request.new_status.value, "updated_count": updated_count},
+        request=http_request,
+    )
 
     db.commit()
 
@@ -514,6 +556,7 @@ async def export_candidate_data(
 @router.delete("/candidates/{candidate_id}")
 async def delete_candidate(
     candidate_id: str,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -546,6 +589,17 @@ async def delete_candidate(
         )
 
     user_email = profile.user.email
+    candidate_name = f"{profile.user.first_name} {profile.user.last_name}"
+
+    log_audit(
+        db=db, admin=current_admin,
+        action="delete_candidate",
+        resource_type="candidate",
+        resource_id=candidate_id,
+        resource_label=candidate_name,
+        details={"email": user_email},
+        request=http_request,
+    )
 
     # Supprimer le profil et l'utilisateur (cascade)
     db.delete(profile.user)
@@ -568,7 +622,7 @@ async def list_users(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100000),  # Augmenté pour permettre l'export complet des données
     role: Optional[UserRole] = None,
     search: Optional[str] = None
 ):
@@ -616,6 +670,7 @@ async def list_users(
 @router.post("/users", status_code=status.HTTP_201_CREATED)
 async def create_user(
     request: dict,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -654,6 +709,14 @@ async def create_user(
     )
 
     db.add(new_user)
+    log_audit(
+        db=db, admin=current_admin,
+        action="create_user",
+        resource_type="user",
+        resource_label=f"{new_user.first_name} {new_user.last_name}",
+        details={"email": new_user.email, "role": new_user.role.value},
+        request=http_request,
+    )
     db.commit()
     db.refresh(new_user)
 
@@ -675,6 +738,7 @@ async def create_user(
 async def update_user(
     user_id: str,
     request: dict,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -718,6 +782,15 @@ async def update_user(
     if "role" in request and current_admin.role == UserRole.SUPER_ADMIN:
         user.role = UserRole(request["role"])
 
+    log_audit(
+        db=db, admin=current_admin,
+        action="update_user",
+        resource_type="user",
+        resource_id=user_id,
+        resource_label=f"{user.first_name} {user.last_name}",
+        details={"email": user.email, "fields_updated": list(request.keys())},
+        request=http_request,
+    )
     db.commit()
     db.refresh(user)
 
@@ -739,6 +812,7 @@ async def update_user(
 async def toggle_user_status(
     user_id: str,
     request: dict,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -769,6 +843,15 @@ async def toggle_user_status(
         )
 
     user.is_active = request.get("isActive", True)
+    log_audit(
+        db=db, admin=current_admin,
+        action="toggle_user_status",
+        resource_type="user",
+        resource_id=user_id,
+        resource_label=f"{user.first_name} {user.last_name}",
+        details={"email": user.email, "is_active": user.is_active},
+        request=http_request,
+    )
     db.commit()
 
     logger.info(
@@ -785,6 +868,7 @@ async def toggle_user_status(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
+    http_request: Request,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -816,6 +900,16 @@ async def delete_user(
         )
 
     user_email = user.email
+    user_name = f"{user.first_name} {user.last_name}"
+    log_audit(
+        db=db, admin=current_admin,
+        action="delete_user",
+        resource_type="user",
+        resource_id=user_id,
+        resource_label=user_name,
+        details={"email": user_email, "role": user.role.value},
+        request=http_request,
+    )
     db.delete(user)
     db.commit()
 
@@ -824,3 +918,34 @@ async def delete_user(
     )
 
     return {"message": "Utilisateur supprimé définitivement"}
+
+
+# ================================================================================
+# Section: Journal d'Audit
+# ================================================================================
+
+@router.get("/audit-logs", response_model=List[AuditLogResponse])
+async def get_audit_logs(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    action: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    admin_id: Optional[str] = None,
+):
+    """
+    Récupérer le journal d'audit des actions admin.
+    Retourne les entrées les plus récentes en premier.
+    """
+    query = db.query(AuditLog)
+
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if resource_type:
+        query = query.filter(AuditLog.resource_type == resource_type)
+    if admin_id:
+        query = query.filter(AuditLog.admin_id == admin_id)
+
+    logs = query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+    return logs

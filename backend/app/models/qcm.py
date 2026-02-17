@@ -1,5 +1,6 @@
 """
 Modèles QCM - Système de questions et sessions avec tirage au sort
+AMÉLIORÉ : Support de nombre flexible de réponses (2-6) et catégories gérées
 """
 from sqlalchemy import Column, String, Boolean, Integer, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
@@ -17,7 +18,7 @@ class QuestionDifficulty(str, enum.Enum):
 
 class QCMQuestion(Base, BaseModel):
     """
-    Questions de la banque QCM
+    Questions de la banque QCM avec support flexible de réponses
     """
     __tablename__ = "qcm_questions"
 
@@ -25,12 +26,32 @@ class QCMQuestion(Base, BaseModel):
 
     # Contenu de la question
     question = Column(Text, nullable=False)
-    options = Column(JSON, nullable=False)  # Liste de 4 options: ['opt1', 'opt2', 'opt3', 'opt4']
-    correct_answer = Column(Integer, nullable=False)  # Index de la bonne réponse (0-3)
+
+    # ⭐ FLEXIBLE: Liste de 2 à 6 options
+    # Format JSON: [
+    #   {"text": "Option A", "id": 0},
+    #   {"text": "Option B", "id": 1},
+    #   {"text": "Option C", "id": 2},
+    #   {"text": "Option D", "id": 3}
+    # ]
+    options = Column(JSON, nullable=False)
+
+    # ⭐ FLEXIBLE: Supporte réponse simple ou multiple
+    # Format JSON: [0] pour une seule réponse, [0, 2] pour réponses multiples
+    correct_answers = Column(JSON, nullable=False)
+
+    # Type de question
+    is_multiple_answer = Column(Boolean, default=False, nullable=False)  # Vrai/Faux
 
     # Métadonnées
     difficulty = Column(String(10), nullable=False)  # 'easy', 'medium', 'hard'
-    category = Column(String(100), nullable=True)  # Ex: 'Maths', 'IA', 'Logique'
+
+    # ⭐ NOUVELLE RELATION avec table catégories
+    category_id = Column(String, ForeignKey("qcm_categories.id"), nullable=True)
+
+    # Garde l'ancienne colonne pour rétrocompatibilité (sera migrée)
+    category = Column(String(100), nullable=True)  # DEPRECATED
+
     explanation = Column(Text, nullable=True)  # Explication de la bonne réponse
     points = Column(Integer, default=1, nullable=False)  # Points par défaut
 
@@ -38,6 +59,7 @@ class QCMQuestion(Base, BaseModel):
     is_active = Column(Boolean, default=True, nullable=False)
 
     # Relations
+    category_ref = relationship("QCMCategory", back_populates="questions")
     attempt_questions = relationship("QCMAttemptQuestion", back_populates="question")
 
     def __repr__(self):
@@ -154,6 +176,7 @@ class QCMAttemptQuestion(Base, BaseModel):
 class QCMAnswer(Base, BaseModel):
     """
     Réponses données par le candidat
+    AMÉLIORÉ : Support de réponses multiples
     """
     __tablename__ = "qcm_answers"
 
@@ -163,8 +186,13 @@ class QCMAnswer(Base, BaseModel):
     attempt_id = Column(String, ForeignKey("qcm_attempts.id", ondelete="CASCADE"), nullable=False)
     question_id = Column(String, ForeignKey("qcm_questions.id"), nullable=False)
 
-    # Réponse donnée
-    answer_given = Column(Integer, nullable=False)  # Index de la réponse choisie (0-3)
+    # ⭐ FLEXIBLE: Supporte réponses simples et multiples
+    # Format JSON: [0] pour une seule réponse, [0, 2, 3] pour réponses multiples
+    answers_given = Column(JSON, nullable=False)
+
+    # Garde l'ancienne colonne pour rétrocompatibilité (sera migrée)
+    answer_given = Column(Integer, nullable=True)  # DEPRECATED
+
     is_correct = Column(Boolean, nullable=True)  # Évalué à la soumission
 
     # Métadonnées

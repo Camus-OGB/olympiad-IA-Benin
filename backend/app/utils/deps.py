@@ -27,12 +27,18 @@ def get_current_user_from_cookie(
     access_token = request.cookies.get("access_token")
 
     if not access_token:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Aucun cookie access_token trouvé. Cookies disponibles: {list(request.cookies.keys())}")
         return None
 
     try:
         # Décoder le token
         payload = decode_token(access_token)
         if not payload or payload.get("type") != "access":
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Token invalide ou mauvais type. Payload: {payload}")
             return None
 
         user_id: str = payload.get("sub")
@@ -43,7 +49,10 @@ def get_current_user_from_cookie(
         user = db.query(User).filter(User.id == user_id).first()
         return user
 
-    except JWTError:
+    except JWTError as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Erreur JWT: {str(e)}")
         return None
 
 

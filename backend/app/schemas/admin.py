@@ -2,8 +2,9 @@
 Schémas Pydantic pour l'espace administrateur - Section 4
 Adaptés à la structure 3FN
 """
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, validator
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from datetime import datetime
 from app.models.candidate_profile import CandidateStatus, Gender
 
 if TYPE_CHECKING:
@@ -25,6 +26,9 @@ class DashboardStats(BaseModel):
 
     # Par statut
     candidates_by_status: Dict[str, int]
+
+    # Par genre
+    candidates_by_gender: Dict[str, int]
 
     # Progression QCM
     qcm_average_score: Optional[float]
@@ -108,6 +112,22 @@ class BulkStatusUpdateRequest(BaseModel):
     candidate_ids: List[str]
     new_status: CandidateStatus
     send_notification: bool = True
+
+
+class AuditLogResponse(BaseModel):
+    """Entrée du journal d'audit"""
+    id: str
+    admin_id: Optional[str] = None
+    admin_email: str
+    action: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    resource_label: Optional[str] = None
+    details: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Rebuild models to resolve forward references

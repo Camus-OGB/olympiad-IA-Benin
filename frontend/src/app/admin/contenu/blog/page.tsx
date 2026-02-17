@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Plus, Edit, Trash2, Eye, EyeOff, Search, Filter, Calendar,
-  Tag, Newspaper, Save, X, Image as ImageIcon, ExternalLink, Loader2, AlertCircle
+  Tag, Newspaper, Save, X, Image as ImageIcon, ExternalLink, Loader2, AlertCircle, ChevronDown
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { contentApi, type NewsItem, type NewsCreate, type NewsUpdate } from '@/lib/api/content';
@@ -19,7 +19,7 @@ const RichTextEditor = dynamic(() => import('@/components/admin/RichTextEditor')
   ),
 });
 
-const categories = ['Annonce', 'Résultats', 'Presse', 'Formation', 'Analyse', 'Interview'] as const;
+const defaultCategories = ['Annonce', 'Résultats', 'Presse', 'Formation', 'Analyse', 'Interview'];
 
 // Helper pour générer un slug (pour affichage uniquement)
 function generateSlug(title: string): string {
@@ -43,6 +43,10 @@ export default function BlogCMS() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [categories, setCategories] = useState<string[]>(defaultCategories);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [formData, setFormData] = useState<{
     title: string;
     excerpt: string;
@@ -50,6 +54,7 @@ export default function BlogCMS() {
     imageUrl: string;
     category: string;
     isPublished: boolean;
+    externalUrl: string;
   }>({
     title: '',
     excerpt: '',
@@ -57,6 +62,7 @@ export default function BlogCMS() {
     imageUrl: '',
     category: 'Annonce',
     isPublished: false,
+    externalUrl: '',
   });
 
   // Charger les articles au montage du composant
@@ -75,6 +81,12 @@ export default function BlogCMS() {
       setError('');
       const data = await contentApi.getNews({ publishedOnly: false, limit: 50 });
       setArticles(data);
+
+      // Extraire les catégories uniques des articles
+      const uniqueCategories = Array.from(
+        new Set([...defaultCategories, ...data.map(a => a.category).filter(Boolean)])
+      ) as string[];
+      setCategories(uniqueCategories);
     } catch (err: any) {
       console.error('Erreur chargement articles:', err);
       setError('Impossible de charger les articles. Vérifiez que le backend est en marche.');
@@ -123,6 +135,7 @@ export default function BlogCMS() {
           imageUrl: formData.imageUrl || undefined,
           category: formData.category,
           isPublished: formData.isPublished,
+          externalUrl: formData.externalUrl || undefined,
         };
         await contentApi.updateNews(editingArticle.id, updateData);
       } else {
@@ -134,6 +147,7 @@ export default function BlogCMS() {
           imageUrl: formData.imageUrl || undefined,
           category: formData.category,
           isPublished: formData.isPublished,
+          externalUrl: formData.externalUrl || undefined,
         };
         await contentApi.createNews(createData);
       }
@@ -169,6 +183,7 @@ export default function BlogCMS() {
       imageUrl: article.imageUrl || '',
       category: article.category || 'Annonce',
       isPublished: article.isPublished,
+      externalUrl: article.externalUrl || '',
     });
     setShowModal(true);
   };
@@ -186,6 +201,7 @@ export default function BlogCMS() {
   const openNewArticleModal = () => {
     setEditingArticle(null);
     setFormData({
+      externalUrl: '',
       title: '',
       excerpt: '',
       content: '',
@@ -206,8 +222,35 @@ export default function BlogCMS() {
       imageUrl: '',
       category: 'Annonce',
       isPublished: false,
+      externalUrl: '',
     });
   };
+
+  const handleAddCategory = () => {
+    if (newCategoryName.trim() && !categories.includes(newCategoryName.trim())) {
+      setCategories([...categories, newCategoryName.trim()]);
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+    }
+  };
+
+  // Fermer le dropdown quand on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
 
   if (loading) {
     return (
@@ -325,19 +368,103 @@ export default function BlogCMS() {
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
-            {['Tout', ...categories].map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-5 py-3 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${selectedCategory === category
-                    ? 'bg-ioai-green text-white shadow-md'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          {/* Dropdown des catégories */}
+          <div className="relative w-full md:w-64 dropdown-container">
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-ioai-green/30 transition-all flex items-center justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-ioai-green" />
+                {selectedCategory}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isDropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden max-h-96 overflow-y-auto">
+                {/* Option "Tout" */}
+                <button
+                  onClick={() => {
+                    setSelectedCategory('Tout');
+                    setIsDropdownOpen(false);
+                  }}
+                  className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors ${
+                    selectedCategory === 'Tout'
+                      ? 'bg-ioai-green text-white'
+                      : 'text-gray-700 hover:bg-gray-50'
                   }`}
-              >
-                {category}
-              </button>
-            ))}
+                >
+                  Tout
+                </button>
+
+                {/* Catégories existantes */}
+                {categories.map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => {
+                      setSelectedCategory(category);
+                      setIsDropdownOpen(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors ${
+                      selectedCategory === category
+                        ? 'bg-ioai-green text-white'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+
+                {/* Ajouter une catégorie */}
+                <div className="border-t-2 border-gray-100 p-3">
+                  {isAddingCategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCategory();
+                          } else if (e.key === 'Escape') {
+                            setIsAddingCategory(false);
+                            setNewCategoryName('');
+                          }
+                        }}
+                        placeholder="Nouvelle catégorie"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ioai-green/20 outline-none"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleAddCategory}
+                        className="px-3 py-2 bg-ioai-green text-white rounded-lg text-sm font-bold hover:bg-green-600"
+                      >
+                        <Save size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
+                        }}
+                        className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-300"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsAddingCategory(true)}
+                      className="w-full px-3 py-2 bg-gray-50 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Plus size={16} />
+                      Ajouter une catégorie
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -526,6 +653,35 @@ export default function BlogCMS() {
                       className="w-full h-full object-cover"
                     />
                   </div>
+                )}
+              </div>
+
+              {/* Lien vers l'article original */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Lien vers l'article original
+                  <span className="ml-2 text-xs font-normal text-gray-500">(optionnel — pour les articles repris depuis un média externe)</span>
+                </label>
+                <div className="relative">
+                  <ExternalLink size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="url"
+                    value={formData.externalUrl}
+                    onChange={(e) => setFormData({ ...formData, externalUrl: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-ioai-green/20 outline-none"
+                    placeholder="https://rfi.fr/afrique/article-exemple..."
+                  />
+                </div>
+                {formData.externalUrl && (
+                  <a
+                    href={formData.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-xs text-ioai-blue hover:underline"
+                  >
+                    <ExternalLink size={12} />
+                    Vérifier le lien
+                  </a>
                 )}
               </div>
 

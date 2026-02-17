@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, BrainCircuit, FileText, Settings, LogOut, Menu, X, Bell, Search, TrendingUp, Quote, Handshake, Trophy, Newspaper, UserCog, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Users, BrainCircuit, Settings, LogOut, Menu, X, Bell, Search, TrendingUp, UserCog, BookOpen, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function AdminLayout({
@@ -12,20 +12,31 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, isLoading } = useAuth();
 
   // Protection: Rediriger si non authentifié ou pas admin
   useEffect(() => {
-    if (!isLoading && !user) {
+    // Attendre que l'authentification soit vérifiée (isLoading = false)
+    if (isLoading) {
+      return;
+    }
+
+    // Marquer qu'on a vérifié au moins une fois
+    setHasCheckedAuth(true);
+
+    if (!user) {
       // Pas connecté → rediriger vers la page de connexion
+      console.log('AdminLayout - No user found, redirecting to login');
       router.push('/auth/connexion');
-    } else if (!isLoading && user && user.role !== 'admin' && user.role !== 'super_admin') {
+    } else if (user.role !== 'admin' && user.role !== 'super_admin') {
       // Connecté mais pas admin → rediriger vers dashboard candidat
+      console.log('AdminLayout - User is not admin, redirecting to candidate dashboard');
       router.push('/candidat/dashboard');
     }
-  }, [user, isLoading, router, pathname]);
+  }, [user, isLoading, router]);
 
   useEffect(() => {
     document.body.classList.add('admin-no-watermark');
@@ -34,13 +45,28 @@ export default function AdminLayout({
     };
   }, []);
 
-  // Afficher un loader pendant la vérification
-  if (isLoading || !user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+  // Afficher un loader pendant la vérification initiale
+  // Ne pas afficher le loader après la première vérification pour éviter les flashs
+  if (isLoading || !hasCheckedAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ioai-green mx-auto mb-4"></div>
           <p className="text-gray-600">Vérification des permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si on arrive ici, c'est que hasCheckedAuth = true et isLoading = false
+  // Si user est null ou pas admin, l'effet ci-dessus va rediriger
+  // On affiche quand même un loader pour éviter un flash
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ioai-green mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirection...</p>
         </div>
       </div>
     );
@@ -54,14 +80,11 @@ export default function AdminLayout({
   ];
 
   const cmsItems = [
-    { label: 'Blog & Actualités', path: '/admin/contenu/blog', icon: Newspaper },
-    { label: 'Bilans (Archives)', path: '/admin/contenu/bilans', icon: Trophy },
-    { label: 'Témoignages', path: '/admin/contenu/temoignages', icon: Quote },
-    { label: 'Partenaires', path: '/admin/contenu/partenaires', icon: Handshake },
-    { label: 'Ressources', path: '/admin/ressources', icon: BookOpen },
+    { label: 'Contenu', path: '/admin/contenu', icon: BookOpen },
   ];
 
   const settingsItems = [
+    { label: 'Journal d\'audit', path: '/admin/audit', icon: ClipboardList },
     { label: 'Utilisateurs Admin', path: '/admin/utilisateurs', icon: UserCog },
     { label: 'Paramètres', path: '/admin/parametres', icon: Settings },
   ];

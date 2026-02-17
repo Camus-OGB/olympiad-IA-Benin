@@ -1,44 +1,66 @@
-'use client';
+ 'use client';
 
-import React, { useState } from 'react';
-import { ChevronDown, Search, MessageCircle, HelpCircle, Sparkles, Users, BookOpen, Laptop, ArrowRight } from 'lucide-react';
-import Link from 'next/link';
-
-const faqs = [
-    {
-        category: "Inscription",
-        icon: Users,
-        color: "ioai-green",
-        items: [
-            { q: "Qui peut s'inscrire aux Olympiades ?", a: "Tout élève inscrit dans un établissement secondaire au Bénin, né après le 1er janvier 2007, et ayant un intérêt pour les sciences et le numérique." },
-            { q: "Quels sont les frais de participation ?", a: "La participation est entièrement gratuite. Tous les frais liés aux bootcamps et déplacements sont pris en charge par l'organisation." },
-            { q: "Comment se déroule l'inscription ?", a: "L'inscription se fait exclusivement en ligne via ce site web. Vous devrez créer un compte, remplir le formulaire et valider votre email." },
-        ]
-    },
-    {
-        category: "Déroulement",
-        icon: BookOpen,
-        color: "ioai-blue",
-        items: [
-            { q: "Faut-il savoir coder pour participer ?", a: "Non, pas pour la première phase de sélection. Elle évalue la logique, les mathématiques et la culture numérique. La programmation (Python) sera enseignée lors des formations ultérieures." },
-            { q: "Quel est le niveau d'anglais requis ?", a: "Un niveau scolaire suffit pour commencer. Cependant, l'anglais technique étant la langue de l'IA, des cours de renforcement seront dispensés aux finalistes." },
-            { q: "Où se déroulent les épreuves ?", a: "La première phase est en ligne. Les phases suivantes (formations régionales, demi-finale, bootcamp) se dérouleront en présentiel, principalement à Cotonou (Sèmè City)." },
-        ]
-    },
-    {
-        category: "Matériel & Technique",
-        icon: Laptop,
-        color: "benin-yellow",
-        items: [
-            { q: "Ai-je besoin d'un ordinateur personnel ?", a: "C'est recommandé mais pas obligatoire pour la première phase (faisable sur tablette/smartphone). Pour les phases pratiques, des ordinateurs seront mis à disposition par les partenaires si nécessaire." },
-            { q: "Que faire si j'ai oublié mon mot de passe ?", a: "Utilisez la fonction 'Mot de passe oublié' sur la page de connexion. Un lien de réinitialisation vous sera envoyé par email." },
-        ]
-    }
-];
+ import React, { useEffect, useMemo, useState } from 'react';
+ import { ChevronDown, Search, MessageCircle, HelpCircle, Users, BookOpen, Laptop, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+ import Link from 'next/link';
+ import { contentApi, FAQItem } from '@/lib/api/content';
 
 const FaqPage: React.FC = () => {
     const [openIndex, setOpenIndex] = useState<{ cat: number, item: number } | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [items, setItems] = useState<FAQItem[]>([]);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const data = await contentApi.getFAQ({ publishedOnly: true });
+                setItems(data);
+            } catch (e: any) {
+                setError(e?.response?.data?.detail || 'Erreur lors du chargement des FAQs');
+                setItems([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        load();
+    }, []);
+
+    const categories = useMemo(() => {
+        const iconMap: Record<string, any> = {
+            Inscription: Users,
+            Déroulement: BookOpen,
+            'Matériel & Technique': Laptop,
+            Technique: Laptop,
+        };
+        const colorMap: Record<string, string> = {
+            Inscription: 'ioai-green',
+            Déroulement: 'ioai-blue',
+            'Matériel & Technique': 'benin-yellow',
+            Technique: 'benin-yellow',
+        };
+
+        const grouped = items.reduce<Record<string, FAQItem[]>>((acc, faq) => {
+            const key = (faq.category || 'Général').trim() || 'Général';
+            acc[key] = acc[key] || [];
+            acc[key].push(faq);
+            return acc;
+        }, {});
+
+        return Object.entries(grouped)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([category, faqs]) => ({
+                category,
+                icon: iconMap[category] || HelpCircle,
+                color: colorMap[category] || 'ioai-green',
+                items: [...faqs].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(f => ({ q: f.question, a: f.answer }))
+            }));
+    }, [items]);
 
     const toggle = (catIdx: number, itemIdx: number) => {
         if (openIndex?.cat === catIdx && openIndex?.item === itemIdx) {
@@ -48,7 +70,7 @@ const FaqPage: React.FC = () => {
         }
     };
 
-    const filteredFaqs = faqs.map(cat => ({
+    const filteredFaqs = categories.map(cat => ({
         ...cat,
         items: cat.items.filter(item =>
             item.q.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -107,8 +129,29 @@ const FaqPage: React.FC = () => {
             {/* FAQ Content */}
             <section className="pb-24">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                    {loading && (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="text-center">
+                                <Loader2 className="w-12 h-12 animate-spin text-ioai-blue mx-auto mb-4" />
+                                <p className="text-gray-600">Chargement des FAQs...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loading && error && (
+                        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-10">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                                <div>
+                                    <p className="font-bold text-red-700">Erreur</p>
+                                    <p className="text-sm text-red-600 mt-1">{error}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-8">
-                        {filteredFaqs.length > 0 ? (
+                        {!loading && filteredFaqs.length > 0 ? (
                             filteredFaqs.map((category, catIdx) => {
                                 const IconComponent = category.icon;
                                 return (

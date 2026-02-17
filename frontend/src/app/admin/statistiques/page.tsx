@@ -1,7 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BarChart2, TrendingUp, Users, MapPin, Download, School, Award, Target, Calendar, FileText, AlertTriangle, CheckCircle, Clock, XCircle, GraduationCap } from 'lucide-react';
+import {
+  TrendingUp,
+  TrendingDown,
+  Users,
+  MapPin,
+  Download,
+  School,
+  Award,
+  Target,
+  Calendar,
+  FileText,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  XCircle,
+  GraduationCap,
+  Filter,
+  RefreshCw,
+  ChevronRight,
+  Activity,
+  Percent,
+  BarChart3
+} from 'lucide-react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -14,6 +36,15 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
 } from 'recharts';
 import { adminApi, DashboardStats } from '@/lib/api/admin';
 
@@ -32,47 +63,54 @@ interface CandidateListItem {
   isVerified: boolean;
 }
 
-const StatsPage: React.FC = () => {
+const StatsPageV2: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Données de l'API
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
 
   // Charger toutes les statistiques depuis l'API
+  const fetchStats = async () => {
+    try {
+      setRefreshing(true);
+      setError(null);
+
+      const [statsData, candidatesData] = await Promise.all([
+        adminApi.getDashboardStats(),
+        adminApi.getCandidates({ limit: 10000 })
+      ]);
+
+      setStats(statsData);
+      setCandidates(candidatesData);
+    } catch (err: any) {
+      console.error('Erreur lors du chargement des statistiques:', err);
+      setError(err.response?.data?.detail || 'Erreur lors du chargement des statistiques');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [statsData, candidatesData] = await Promise.all([
-          adminApi.getDashboardStats(),
-          adminApi.getCandidates({ limit: 100 })
-        ]);
-
-        setStats(statsData);
-        setCandidates(candidatesData);
-      } catch (err: any) {
-        console.error('Erreur lors du chargement des statistiques:', err);
-        setError(err.response?.data?.detail || 'Erreur lors du chargement des statistiques');
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    setLoading(true);
     fetchStats();
   }, []);
 
   // État de chargement
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ioai-green mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des statistiques...</p>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-ioai-green mx-auto mb-4"></div>
+            <Activity className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-ioai-green" size={28} />
+          </div>
+          <p className="text-gray-600 font-medium">Analyse des données en cours...</p>
+          <p className="text-gray-400 text-sm mt-1">Préparation des graphiques et métriques</p>
         </div>
       </div>
     );
@@ -81,17 +119,20 @@ const StatsPage: React.FC = () => {
   // État d'erreur
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <p className="text-red-600 font-semibold mb-2">Erreur de chargement</p>
-          <p className="text-gray-600">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-ioai-green text-white rounded-lg hover:bg-green-600"
-          >
-            Réessayer
-          </button>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 to-orange-50">
+        <div className="text-center max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Erreur de chargement</h3>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 font-medium transition-all hover:shadow-lg"
+            >
+              <RefreshCw size={18} className="inline mr-2" />
+              Réessayer
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -109,7 +150,7 @@ const StatsPage: React.FC = () => {
     });
   })();
 
-  const genderStats = {
+  const genderStats = stats?.candidatesByGender || {
     male: filteredCandidates.filter(c => c.gender === 'male').length,
     female: filteredCandidates.filter(c => c.gender === 'female').length,
     unspecified: filteredCandidates.filter(c => !c.gender).length,
@@ -129,7 +170,7 @@ const StatsPage: React.FC = () => {
 
   const topSchools = Object.entries(schoolStats)
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 5);
+    .slice(0, 10);
 
   const qcmScores = filteredCandidates
     .filter(c => c.qcmScore != null)
@@ -147,14 +188,29 @@ const StatsPage: React.FC = () => {
     ? ((stats.verifiedCandidates / stats.totalCandidates) * 100).toFixed(1)
     : '0';
 
-  const completionRate = stats?.totalCandidates
-    ? (((stats.totalCandidates - (stats.candidatesByStatus?.registered || 0)) / stats.totalCandidates) * 100).toFixed(1)
+  const qcmCompletionRate = stats?.totalCandidates
+    ? (((stats.qcmCompleted || 0) / stats.totalCandidates) * 100).toFixed(1)
+    : '0';
+
+  // Calculer la croissance hebdomadaire
+  const lastWeekCandidates = candidates.filter(c => {
+    const t = Date.parse(c.createdAt);
+    return Number.isFinite(t) && t >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+  }).length;
+
+  const previousWeekCandidates = candidates.filter(c => {
+    const t = Date.parse(c.createdAt);
+    return Number.isFinite(t) && t >= Date.now() - 14 * 24 * 60 * 60 * 1000 && t < Date.now() - 7 * 24 * 60 * 60 * 1000;
+  }).length;
+
+  const weeklyGrowth = previousWeekCandidates > 0
+    ? (((lastWeekCandidates - previousWeekCandidates) / previousWeekCandidates) * 100).toFixed(1)
     : '0';
 
   const PERIOD_LABELS: Record<typeof selectedPeriod, string> = {
     week: '7 derniers jours',
     month: '30 derniers jours',
-    all: 'Tout',
+    all: 'Toutes les données',
   };
 
   const CHART_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#F97316', '#64748B'];
@@ -167,421 +223,641 @@ const StatsPage: React.FC = () => {
 
   const regionBarData = Object.entries(stats?.candidatesByRegion || {})
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 8)
     .map(([name, value]) => ({ name: name || 'Non renseigné', value }));
 
+  // Données pour le graphique d'évolution temporelle
+  const timelineData = (() => {
+    const last30Days = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      return date;
+    });
+
+    return last30Days.map(date => {
+      const dayStart = date.setHours(0, 0, 0, 0);
+      const dayEnd = date.setHours(23, 59, 59, 999);
+      const count = candidates.filter(c => {
+        const t = Date.parse(c.createdAt);
+        return Number.isFinite(t) && t >= dayStart && t <= dayEnd;
+      }).length;
+
+      return {
+        date: new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' }).format(date),
+        inscriptions: count
+      };
+    });
+  })();
+
+  // Performance par région (Radar chart)
+  const performanceData = Object.entries(stats?.candidatesByRegion || {})
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+    .map(([region, count]) => ({
+      region: region || 'Autre',
+      candidats: count,
+      verifies: Math.floor(count * (parseFloat(validationRate) / 100))
+    }));
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-display font-black text-gray-900">Statistiques & Rapports</h1>
-          <p className="text-gray-500">Analysez les performances et la progression de AOAI 2026</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            {(['week', 'month', 'all'] as const).map((period) => (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+      {/* Sticky Header avec glassmorphism */}
+      <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-display font-black bg-gradient-to-r from-ioai-blue to-ioai-green bg-clip-text text-transparent">
+                Analytics Dashboard
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">
+                Vue complète des métriques AOAI 2026 • {filteredCandidates.length} candidats analysés
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Sélecteur de période */}
+              <div className="flex bg-gray-100 rounded-xl p-1.5 shadow-inner">
+                {(['week', 'month', 'all'] as const).map((period) => (
+                  <button
+                    key={period}
+                    onClick={() => setSelectedPeriod(period)}
+                    className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+                      selectedPeriod === period
+                        ? 'bg-white text-gray-900 shadow-md'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {PERIOD_LABELS[period]}
+                  </button>
+                ))}
+              </div>
+
+              {/* Bouton Refresh */}
               <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${selectedPeriod === period
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                onClick={fetchStats}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50"
               >
-                {PERIOD_LABELS[period]}
+                <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+                <span className="hidden sm:inline">Actualiser</span>
               </button>
-            ))}
+
+              {/* Bouton Export */}
+              <button className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-ioai-green to-green-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all">
+                <Download size={18} />
+                <span className="hidden sm:inline">Exporter</span>
+              </button>
+            </div>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-ioai-green text-white font-medium rounded-lg hover:bg-green-600 transition-colors">
-            <Download size={18} />
-            <span className="hidden sm:inline">Exporter PDF</span>
-          </button>
         </div>
       </div>
 
-      {/* Vue d'ensemble rapide */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <Users size={28} />
-            <span className="text-sm bg-white/20 px-3 py-1 rounded-full">Total</span>
-          </div>
-          <p className="text-4xl font-black mb-1">{stats?.totalCandidates ?? 0}</p>
-          <p className="text-blue-100">Candidats inscrits</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <CheckCircle size={28} />
-            <span className="text-sm bg-white/20 px-3 py-1 rounded-full">{validationRate}%</span>
-          </div>
-          <p className="text-4xl font-black mb-1">{stats?.verifiedCandidates ?? 0}</p>
-          <p className="text-green-100">Profils validés</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <Award size={28} />
-            <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
-              {stats?.qcmAverageScore != null ? `${stats.qcmAverageScore.toFixed(0)}%` : '-'}
-            </span>
-          </div>
-          <p className="text-4xl font-black mb-1">{stats?.qcmCompleted ?? 0}</p>
-          <p className="text-purple-100">QCM complétés</p>
-        </div>
-      </div>
-
-      {/* Indicateurs clés de performance */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
-              <Clock size={20} className="text-orange-500" />
+      <div className="max-w-[1600px] mx-auto px-6 py-8 space-y-8">
+        {/* KPIs principaux - Design moderne avec gradients */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Total Candidats */}
+          <div className="group relative overflow-hidden bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1">
+            <div className="absolute top-0 right-0 opacity-10">
+              <Users size={120} />
             </div>
-            <div>
-              <p className="text-xs text-gray-500">En attente</p>
-              <p className="text-2xl font-black text-gray-900">{stats?.candidatesByStatus?.registered ?? 0}</p>
-            </div>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div
-              className="bg-orange-500 h-full"
-              style={{
-                width: `${stats?.totalCandidates ? ((stats.candidatesByStatus?.registered || 0) / stats.totalCandidates) * 100 : 0}%`
-              }}
-            ></div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-              <Target size={20} className="text-ioai-blue" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">QCM en attente</p>
-              <p className="text-2xl font-black text-gray-900">{stats?.candidatesByStatus?.qcm_pending ?? 0}</p>
-            </div>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div
-              className="bg-blue-500 h-full"
-              style={{
-                width: `${stats?.totalCandidates ? ((stats.candidatesByStatus?.qcm_pending || 0) / stats.totalCandidates) * 100 : 0}%`
-              }}
-            ></div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-              <Calendar size={20} className="text-purple-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Récents (7j)</p>
-              <p className="text-2xl font-black text-gray-900">{stats?.recentRegistrations ?? 0}</p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {stats?.recentRegistrations && stats?.totalCandidates
-              ? `${((stats.recentRegistrations / stats.totalCandidates) * 100).toFixed(0)}% du total`
-              : '-'}
-          </p>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-              <XCircle size={20} className="text-red-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Rejetés</p>
-              <p className="text-2xl font-black text-gray-900">{stats?.candidatesByStatus?.rejected ?? 0}</p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {stats?.candidatesByStatus?.rejected && stats?.totalCandidates
-              ? `${((stats.candidatesByStatus.rejected / stats.totalCandidates) * 100).toFixed(1)}% du total`
-              : '-'}
-          </p>
-        </div>
-      </div>
-
-      {/* Statistiques par genre */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2">
-            <Users size={18} className="text-gray-400" />
-            Répartition par genre
-          </h3>
-          <span className="text-sm text-gray-500">Période: {PERIOD_LABELS[selectedPeriod]}</span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="bg-gradient-to-br from-blue-400 to-blue-500 rounded-xl p-5 text-white">
-            <div className="flex items-center justify-between mb-2">
-              <Users size={24} className="opacity-80" />
-              <span className="text-sm bg-white/20 px-2 py-1 rounded">
-                {stats?.totalCandidates ? ((genderStats.male / stats.totalCandidates) * 100).toFixed(0) : 0}%
-              </span>
-            </div>
-            <p className="text-3xl font-black mb-1">{genderStats.male}</p>
-            <p className="text-sm text-blue-100">Garçons</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-pink-400 to-pink-500 rounded-xl p-5 text-white">
-            <div className="flex items-center justify-between mb-2">
-              <Users size={24} className="opacity-80" />
-              <span className="text-sm bg-white/20 px-2 py-1 rounded">
-                {stats?.totalCandidates ? ((genderStats.female / stats.totalCandidates) * 100).toFixed(0) : 0}%
-              </span>
-            </div>
-            <p className="text-3xl font-black mb-1">{genderStats.female}</p>
-            <p className="text-sm text-pink-100">Filles</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-gray-400 to-gray-500 rounded-xl p-5 text-white">
-            <div className="flex items-center justify-between mb-2">
-              <AlertTriangle size={24} className="opacity-80" />
-              <span className="text-sm bg-white/20 px-2 py-1 rounded">
-                {stats?.totalCandidates ? ((genderStats.unspecified / stats.totalCandidates) * 100).toFixed(0) : 0}%
-              </span>
-            </div>
-            <p className="text-3xl font-black mb-1">{genderStats.unspecified}</p>
-            <p className="text-sm text-gray-100">Non renseigné</p>
-          </div>
-        </div>
-
-        {/* Graphique de parité */}
-        {genderStats.male + genderStats.female > 0 && (
-          <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-            <p className="text-sm font-medium text-gray-600 mb-3">Parité Filles / Garçons</p>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-6 bg-gray-200 rounded-full overflow-hidden flex">
-                <div
-                  className="bg-pink-500 flex items-center justify-center text-xs font-bold text-white"
-                  style={{ width: `${(genderStats.female / (genderStats.male + genderStats.female)) * 100}%` }}
-                >
-                  {genderStats.female > 0 && `${((genderStats.female / (genderStats.male + genderStats.female)) * 100).toFixed(0)}%`}
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <Users size={24} />
                 </div>
-                <div
-                  className="bg-blue-500 flex items-center justify-center text-xs font-bold text-white"
-                  style={{ width: `${(genderStats.male / (genderStats.male + genderStats.female)) * 100}%` }}
-                >
-                  {genderStats.male > 0 && `${((genderStats.male / (genderStats.male + genderStats.female)) * 100).toFixed(0)}%`}
+                <div className="flex items-center gap-1 text-sm font-semibold bg-white/20 px-3 py-1 rounded-full">
+                  {parseFloat(weeklyGrowth) >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                  {weeklyGrowth}%
                 </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-              <span>🚺 {genderStats.female} filles</span>
-              <span>🚹 {genderStats.male} garçons</span>
+              <p className="text-5xl font-black mb-2">{stats?.totalCandidates?.toLocaleString() ?? 0}</p>
+              <p className="text-blue-100 font-medium">Candidats inscrits</p>
+              <p className="text-blue-200 text-xs mt-2">+{lastWeekCandidates} cette semaine</p>
             </div>
           </div>
-        )}
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Répartition par région */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <MapPin size={18} className="text-gray-400" />
-              Répartition par département
-            </h3>
-            <span className="text-sm font-bold text-ioai-blue">{Object.keys(stats?.candidatesByRegion || {}).length} départements</span>
+          {/* Profils validés */}
+          <div className="group relative overflow-hidden bg-gradient-to-br from-green-500 via-green-600 to-emerald-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1">
+            <div className="absolute top-0 right-0 opacity-10">
+              <CheckCircle size={120} />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <CheckCircle size={24} />
+                </div>
+                <div className="flex items-center gap-1 text-sm font-semibold bg-white/20 px-3 py-1 rounded-full">
+                  <Percent size={14} />
+                  {validationRate}%
+                </div>
+              </div>
+              <p className="text-5xl font-black mb-2">{stats?.verifiedCandidates?.toLocaleString() ?? 0}</p>
+              <p className="text-green-100 font-medium">Profils validés</p>
+              <p className="text-green-200 text-xs mt-2">Taux de validation</p>
+            </div>
           </div>
-          {regionBarData.length > 0 ? (
-            <div className="h-[340px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={regionBarData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" width={110} />
-                  <Tooltip />
-                  <Bar dataKey="value" radius={[6, 6, 6, 6]}>
-                    {regionBarData.map((_, idx) => (
-                      <Cell key={`cell-region-${idx}`} fill={CHART_COLORS[(idx + 1) % CHART_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+
+          {/* QCM Complétés */}
+          <div className="group relative overflow-hidden bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1">
+            <div className="absolute top-0 right-0 opacity-10">
+              <Award size={120} />
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              <MapPin size={48} className="mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Aucune donnée régionale</p>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <Award size={24} />
+                </div>
+                <div className="flex items-center gap-1 text-sm font-semibold bg-white/20 px-3 py-1 rounded-full">
+                  {stats?.qcmAverageScore != null ? `${stats.qcmAverageScore.toFixed(0)}%` : '-'}
+                </div>
+              </div>
+              <p className="text-5xl font-black mb-2">{stats?.qcmCompleted?.toLocaleString() ?? 0}</p>
+              <p className="text-purple-100 font-medium">QCM complétés</p>
+              <p className="text-purple-200 text-xs mt-2">Score moyen: {stats?.qcmAverageScore?.toFixed(1) ?? 0}%</p>
             </div>
-          )}
+          </div>
+
+          {/* Taux de complétion */}
+          <div className="group relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-red-500 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1">
+            <div className="absolute top-0 right-0 opacity-10">
+              <Activity size={120} />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <Activity size={24} />
+                </div>
+                <div className="flex items-center gap-1 text-sm font-semibold bg-white/20 px-3 py-1 rounded-full">
+                  <Percent size={14} />
+                  {qcmCompletionRate}%
+                </div>
+              </div>
+              <p className="text-5xl font-black mb-2">{Object.keys(stats?.candidatesByRegion || {}).length}</p>
+              <p className="text-orange-100 font-medium">Départements actifs</p>
+              <p className="text-orange-200 text-xs mt-2">Couverture nationale</p>
+            </div>
+          </div>
         </div>
 
-        {/* Top 5 écoles */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        {/* Évolution temporelle - Grand graphique */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-8">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <School size={18} className="text-gray-400" />
-              Top 5 établissements
-            </h3>
-            <span className="text-sm font-bold text-ioai-green">{Object.keys(schoolStats).length} écoles</span>
+            <div>
+              <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <Activity size={20} className="text-white" />
+                </div>
+                Évolution des inscriptions
+              </h3>
+              <p className="text-gray-500 text-sm mt-1">Tendance sur les 30 derniers jours</p>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-black text-blue-600">{lastWeekCandidates}</p>
+              <p className="text-sm text-gray-500">inscriptions (7j)</p>
+            </div>
           </div>
-          <div className="space-y-4">
-            {topSchools.map(([school, count], index) => {
-              const total = stats?.totalCandidates || 1;
-              const percentage = ((count / total) * 100).toFixed(1);
-              const medals = ['🥇', '🥈', '🥉'];
-              return (
-                <div key={`school-${index}-${school}`} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <span className="text-2xl">{medals[index] || '🏅'}</span>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 text-sm">{school}</p>
-                    <p className="text-xs text-gray-500">{percentage}% du total</p>
+          <div className="h-[350px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={timelineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorInscriptions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: '#6B7280', fontSize: 12 }}
+                  tickLine={{ stroke: '#E5E7EB' }}
+                />
+                <YAxis
+                  tick={{ fill: '#6B7280', fontSize: 12 }}
+                  tickLine={{ stroke: '#E5E7EB' }}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'white',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '12px',
+                    padding: '12px'
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="inscriptions"
+                  stroke="#3B82F6"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorInscriptions)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Grille de métriques détaillées */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Répartition par genre - Version améliorée */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-pink-500 to-blue-500 rounded-lg flex items-center justify-center">
+                  <Users size={16} className="text-white" />
+                </div>
+                Par genre
+              </h3>
+              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                {((genderStats.male ?? 0) + (genderStats.female ?? 0)).toLocaleString()}
+              </span>
+            </div>
+
+            {(genderStats.male ?? 0) + (genderStats.female ?? 0) > 0 ? (
+              <div className="space-y-6">
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Garçons', value: genderStats.male ?? 0, color: '#3B82F6' },
+                          { name: 'Filles', value: genderStats.female ?? 0, color: '#EC4899' }
+                        ].filter(item => item.value > 0)}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={85}
+                        paddingAngle={4}
+                      >
+                        {[
+                          { name: 'Garçons', value: genderStats.male ?? 0, color: '#3B82F6' },
+                          { name: 'Filles', value: genderStats.female ?? 0, color: '#EC4899' }
+                        ].filter(item => item.value > 0).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">🚹</span>
+                      <span className="text-xs font-semibold text-blue-700">Garçons</span>
+                    </div>
+                    <p className="text-2xl font-black text-blue-600">{genderStats.male ?? 0}</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      {stats?.totalCandidates ? (((genderStats.male ?? 0) / stats.totalCandidates) * 100).toFixed(1) : 0}%
+                    </p>
                   </div>
-                  <span className="text-xl font-black text-ioai-blue">{count}</span>
+
+                  <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">🚺</span>
+                      <span className="text-xs font-semibold text-pink-700">Filles</span>
+                    </div>
+                    <p className="text-2xl font-black text-pink-600">{genderStats.female ?? 0}</p>
+                    <p className="text-xs text-pink-600 mt-1">
+                      {stats?.totalCandidates ? (((genderStats.female ?? 0) / stats.totalCandidates) * 100).toFixed(1) : 0}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <Users size={48} className="mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Aucune donnée disponible</p>
+              </div>
+            )}
+          </div>
+
+          {/* Distribution des scores */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center">
+                  <BarChart3 size={16} className="text-white" />
+                </div>
+                Scores QCM
+              </h3>
+              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                {qcmScores.length} tests
+              </span>
+            </div>
+
+            {qcmScores.length > 0 ? (
+              <div className="space-y-4">
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={scoreBarData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="range" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#8B5CF6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-purple-600 font-semibold mb-1">Score moyen</p>
+                      <p className="text-3xl font-black text-purple-600">
+                        {stats?.qcmAverageScore?.toFixed(1) ?? 0}%
+                      </p>
+                    </div>
+                    <Award size={40} className="text-purple-300" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <Award size={48} className="mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Aucun QCM complété</p>
+              </div>
+            )}
+          </div>
+
+          {/* Répartition par classe */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+                  <GraduationCap size={16} className="text-white" />
+                </div>
+                Par classe
+              </h3>
+              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                {gradePieData.length} niveaux
+              </span>
+            </div>
+
+            {gradePieData.length > 0 ? (
+              <div className="h-[290px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={gradePieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      paddingAngle={2}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {gradePieData.map((_, idx) => (
+                        <Cell key={`cell-${idx}`} fill={CHART_COLORS[(idx + 2) % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <GraduationCap size={48} className="mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Aucune donnée disponible</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Analyses géographiques */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Carte des départements */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                    <MapPin size={20} className="text-white" />
+                  </div>
+                  Couverture géographique
+                </h3>
+                <p className="text-gray-500 text-sm mt-1">Répartition par département</p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-black text-green-600">{Object.keys(stats?.candidatesByRegion || {}).length}</p>
+                <p className="text-sm text-gray-500">départements</p>
+              </div>
+            </div>
+
+            {regionBarData.length > 0 ? (
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={regionBarData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                      {regionBarData.map((_, idx) => (
+                        <Cell key={`cell-${idx}`} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <MapPin size={48} className="mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Aucune donnée disponible</p>
+              </div>
+            )}
+          </div>
+
+          {/* Top établissements */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                    <School size={20} className="text-white" />
+                  </div>
+                  Top 10 établissements
+                </h3>
+                <p className="text-gray-500 text-sm mt-1">Classement par nombre de candidats</p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-black text-blue-600">{Object.keys(schoolStats).length}</p>
+                <p className="text-sm text-gray-500">écoles</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {topSchools.map(([school, count], index) => {
+                const total = stats?.totalCandidates || 1;
+                const percentage = ((count / total) * 100).toFixed(1);
+                const medals = ['🥇', '🥈', '🥉'];
+
+                return (
+                  <div
+                    key={`school-${index}`}
+                    className="group flex items-center gap-3 p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all"
+                  >
+                    <div className="flex-shrink-0">
+                      <span className="text-3xl">{medals[index] || '🏅'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900 text-sm truncate">{school}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 bg-gray-200 h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full transition-all"
+                            style={{ width: `${percentage}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-gray-500 font-semibold">{percentage}%</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-black text-blue-600">{count}</p>
+                      <p className="text-xs text-gray-500">candidats</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Pipeline de sélection - Version améliorée */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <Target size={20} className="text-white" />
+                </div>
+                Pipeline de sélection
+              </h3>
+              <p className="text-gray-500 text-sm mt-1">Suivi de la progression des candidats</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+            {stats?.candidatesByStatus && Object.entries(stats.candidatesByStatus).map(([status, count], idx) => {
+              const configs: Record<string, { label: string; icon: React.ReactNode; gradient: string; ring: string }> = {
+                registered: {
+                  label: 'Inscrits',
+                  icon: <Clock size={22} />,
+                  gradient: 'from-yellow-400 to-orange-500',
+                  ring: 'ring-yellow-200'
+                },
+                qcm_pending: {
+                  label: 'QCM en attente',
+                  icon: <FileText size={22} />,
+                  gradient: 'from-orange-400 to-red-500',
+                  ring: 'ring-orange-200'
+                },
+                qcm_completed: {
+                  label: 'QCM complétés',
+                  icon: <CheckCircle size={22} />,
+                  gradient: 'from-green-400 to-emerald-500',
+                  ring: 'ring-green-200'
+                },
+                regional_selected: {
+                  label: 'Sélection régionale',
+                  icon: <MapPin size={22} />,
+                  gradient: 'from-blue-400 to-cyan-500',
+                  ring: 'ring-blue-200'
+                },
+                bootcamp_selected: {
+                  label: 'Bootcamp',
+                  icon: <Award size={22} />,
+                  gradient: 'from-purple-400 to-pink-500',
+                  ring: 'ring-purple-200'
+                },
+                national_finalist: {
+                  label: 'Finalistes',
+                  icon: <TrendingUp size={22} />,
+                  gradient: 'from-indigo-400 to-purple-500',
+                  ring: 'ring-indigo-200'
+                },
+                rejected: {
+                  label: 'Non retenus',
+                  icon: <XCircle size={22} />,
+                  gradient: 'from-gray-400 to-gray-500',
+                  ring: 'ring-gray-200'
+                },
+              };
+
+              const config = configs[status] || {
+                label: status,
+                icon: <Activity size={22} />,
+                gradient: 'from-gray-400 to-gray-500',
+                ring: 'ring-gray-200'
+              };
+              const percentage = stats.totalCandidates > 0 ? ((count / stats.totalCandidates) * 100).toFixed(1) : '0';
+
+              return (
+                <div
+                  key={`status-${idx}`}
+                  className={`group relative bg-gradient-to-br ${config.gradient} rounded-2xl p-6 text-white shadow-lg hover:shadow-2xl transition-all hover:-translate-y-1 ring-4 ${config.ring}`}
+                >
+                  <div className="flex flex-col items-center text-center space-y-3">
+                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                      {config.icon}
+                    </div>
+                    <div>
+                      <p className="text-4xl font-black mb-1">{count.toLocaleString()}</p>
+                      <p className="text-xs font-semibold opacity-90">{config.label}</p>
+                      <p className="text-xs opacity-75 mt-1">{percentage}%</p>
+                    </div>
+                  </div>
+                  {idx < 6 && (
+                    <ChevronRight className="absolute -right-3 top-1/2 transform -translate-y-1/2 text-gray-300 hidden lg:block" size={20} />
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Distribution des scores QCM */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <BarChart2 size={18} className="text-gray-400" />
-              Distribution des scores QCM
-            </h3>
-            <span className="text-sm text-gray-500">{qcmScores.length} complétés</span>
-          </div>
-          {qcmScores.length > 0 ? (
-            <div className="space-y-6">
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={scoreBarData} margin={{ left: 8, right: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="range" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="value" radius={[6, 6, 0, 0]} fill="#3B82F6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-100">
-                <p className="text-sm text-gray-600 mb-1">Score moyen</p>
-                <p className="text-4xl font-black text-purple-600">{stats?.qcmAverageScore?.toFixed(1) ?? 0}%</p>
-              </div>
+        {/* Performance radar (bonus) */}
+        {performanceData.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center">
+                  <Activity size={20} className="text-white" />
+                </div>
+                Performance par région (Top 6)
+              </h3>
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              <Award size={48} className="mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Aucun QCM complété pour le moment</p>
-            </div>
-          )}
-        </div>
-
-        {/* Répartition par classe */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <GraduationCap size={18} className="text-gray-400" />
-              Répartition par classe
-            </h3>
-          </div>
-          {gradePieData.length > 0 ? (
-            <div className="h-[340px]">
+            <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={gradePieData} dataKey="value" nameKey="name" outerRadius={120} paddingAngle={2}>
-                    {gradePieData.map((_, idx) => (
-                      <Cell key={`cell-grade-${idx}`} fill={CHART_COLORS[(idx + 2) % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
+                <RadarChart data={performanceData}>
+                  <PolarGrid stroke="#E5E7EB" />
+                  <PolarAngleAxis dataKey="region" tick={{ fontSize: 12 }} />
+                  <PolarRadiusAxis angle={90} domain={[0, 'auto']} />
+                  <Radar name="Candidats" dataKey="candidats" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.5} />
+                  <Radar name="Vérifiés" dataKey="verifies" stroke="#10B981" fill="#10B981" fillOpacity={0.5} />
                   <Legend />
-                </PieChart>
+                  <Tooltip />
+                </RadarChart>
               </ResponsiveContainer>
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              <GraduationCap size={48} className="mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Aucune donnée de classe</p>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Pipeline de sélection */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2">
-            <Target size={18} className="text-gray-400" />
-            Pipeline de sélection
-          </h3>
-          <span className="text-sm text-gray-500">Progression des candidats</span>
+        {/* Footer message */}
+        <div className="bg-gradient-to-r from-ioai-blue via-purple-600 to-ioai-green rounded-2xl p-8 text-white text-center shadow-xl">
+          <Activity size={48} className="mx-auto mb-4 animate-pulse" />
+          <h3 className="text-2xl font-black mb-2">Données mises à jour en temps réel</h3>
+          <p className="text-white/90 max-w-2xl mx-auto">
+            Ce tableau de bord affiche les statistiques complètes de {stats?.totalCandidates?.toLocaleString() ?? 0} candidats.
+            Toutes les métriques sont calculées dynamiquement depuis la base de données.
+          </p>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-          {stats?.candidatesByStatus && Object.entries(stats.candidatesByStatus).map(([status, count], idx) => {
-            const colors: Record<string, string> = {
-              registered: 'border-yellow-300 bg-yellow-50',
-              qcm_pending: 'border-orange-300 bg-orange-50',
-              qcm_completed: 'border-green-300 bg-green-50',
-              regional_selected: 'border-blue-300 bg-blue-50',
-              bootcamp_selected: 'border-purple-300 bg-purple-50',
-              national_finalist: 'border-indigo-300 bg-indigo-50',
-              rejected: 'border-red-300 bg-red-50',
-            };
-            const textColors: Record<string, string> = {
-              registered: 'text-yellow-600',
-              qcm_pending: 'text-orange-600',
-              qcm_completed: 'text-green-600',
-              regional_selected: 'text-blue-600',
-              bootcamp_selected: 'text-purple-600',
-              national_finalist: 'text-indigo-600',
-              rejected: 'text-red-600',
-            };
-            const labels: Record<string, string> = {
-              registered: 'Inscrits',
-              qcm_pending: 'QCM',
-              qcm_completed: 'Complétés',
-              regional_selected: 'Régional',
-              bootcamp_selected: 'Bootcamp',
-              national_finalist: 'Finalistes',
-              rejected: 'Rejetés',
-            };
-            const icons: Record<string, React.ReactNode> = {
-              registered: <Clock size={20} />,
-              qcm_pending: <FileText size={20} />,
-              qcm_completed: <CheckCircle size={20} />,
-              regional_selected: <MapPin size={20} />,
-              bootcamp_selected: <Award size={20} />,
-              national_finalist: <TrendingUp size={20} />,
-              rejected: <XCircle size={20} />,
-            };
-            const colorClass = colors[status] || 'border-gray-300 bg-gray-50';
-            const textColor = textColors[status] || 'text-gray-600';
-            const percentage = stats.totalCandidates > 0 ? ((count / stats.totalCandidates) * 100).toFixed(1) : '0';
-            return (
-              <div key={`status-${idx}-${status}`} className={`border-2 ${colorClass} rounded-xl p-4 text-center`}>
-                <div className={`flex justify-center mb-2 ${textColor}`}>
-                  {icons[status]}
-                </div>
-                <p className={`text-3xl font-black ${textColor} mb-1`}>{count}</p>
-                <p className="text-xs font-medium text-gray-600 mb-1">{labels[status] || status}</p>
-                <p className="text-xs text-gray-500">{percentage}%</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Message de fin */}
-      <div className="bg-gradient-to-r from-ioai-blue to-ioai-green rounded-xl p-6 text-white text-center">
-        <h3 className="text-xl font-bold mb-2">Statistiques en temps réel</h3>
-        <p className="text-white/90">Les données sont mises à jour automatiquement depuis la base de données</p>
       </div>
     </div>
   );
 };
 
-export default StatsPage;
+export default StatsPageV2;

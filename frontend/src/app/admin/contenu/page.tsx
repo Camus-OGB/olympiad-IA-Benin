@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Calendar, Quote, Handshake, Image, ArrowRight, Trophy, Newspaper } from 'lucide-react';
+import { Calendar, Quote, Handshake, ArrowRight, Trophy, Newspaper, HelpCircle, BookOpen } from 'lucide-react';
 
 export default function ContentManager() {
   const cmsModules = [
@@ -42,11 +42,18 @@ export default function ContentManager() {
       color: 'from-green-500 to-green-600'
     },
     {
-      title: 'Hero Section',
-      description: 'Personnalisez la section principale de la page d\'accueil',
-      icon: Image,
-      path: '/admin/contenu/hero',
+      title: 'FAQs',
+      description: 'Créez et modifiez les questions fréquentes visibles sur le site',
+      icon: HelpCircle,
+      path: '/admin/contenu/faqs',
       color: 'from-orange-500 to-orange-600'
+    },
+    {
+      title: 'Ressources',
+      description: 'Gérez les documents et ressources pédagogiques mis à disposition',
+      icon: BookOpen,
+      path: '/admin/ressources',
+      color: 'from-teal-500 to-teal-600'
     }
   ];
 

@@ -1,289 +1,331 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Save, Trash2, AlertCircle, Loader2 } from 'lucide-react'
-import { qcmApi, QuestionWithAnswer } from '@/lib/api/qcm'
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { ArrowLeft, Save, Trash2, AlertCircle, Loader2, Plus, X, Circle, CheckSquare } from 'lucide-react';
+import { qcmApi, QuestionOption, QuestionWithAnswer } from '@/lib/api/qcm';
 
 const DIFFICULTY_OPTIONS = [
-  { value: 'easy', label: 'Facile', color: 'bg-green-100 text-green-800' },
-  { value: 'medium', label: 'Moyen', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'hard', label: 'Difficile', color: 'bg-red-100 text-red-800' },
-]
-
-const CATEGORIES = ['Mathématiques', 'IA & ML', 'Programmation', 'Logique', 'Sciences', 'Autre']
+  { value: 'easy', label: 'Facile' },
+  { value: 'medium', label: 'Moyen' },
+  { value: 'hard', label: 'Difficile' },
+];
 
 export default function EditQuestionPage() {
-  const router = useRouter()
-  const params = useParams()
-  const questionId = params.id as string
+  const router = useRouter();
+  const params = useParams();
+  const questionId = params.id as string;
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const [question, setQuestion] = useState<QuestionWithAnswer | null>(null)
-  const [formData, setFormData] = useState({
-    question: '',
-    options: ['', '', '', ''],
-    correctAnswer: 0,
-    difficulty: 'medium',
-    category: '',
-    explanation: '',
-    points: 1,
-  })
+  // Champs du formulaire
+  const [questionText, setQuestionText] = useState('');
+  const [options, setOptions] = useState<QuestionOption[]>([]);
+  const [correctAnswers, setCorrectAnswers] = useState<number[]>([0]);
+  const [isMultipleAnswer, setIsMultipleAnswer] = useState(false);
+  const [difficulty, setDifficulty] = useState('medium');
+  const [category, setCategory] = useState('');
+  const [explanation, setExplanation] = useState('');
+  const [points, setPoints] = useState(1);
 
   useEffect(() => {
-    loadQuestion()
-  }, [questionId])
+    loadQuestion();
+  }, [questionId]);
 
   const loadQuestion = async () => {
     try {
-      setLoading(true)
-      const questions = await qcmApi.getAllQuestions()
-      const foundQuestion = questions.find(q => q.id === questionId)
+      setLoading(true);
+      const questions = await qcmApi.getAllQuestions();
+      const q = questions.find(q => q.id === questionId);
+      if (!q) { setError('Question non trouvée'); return; }
 
-      if (!foundQuestion) {
-        setError('Question non trouvée')
-        return
-      }
+      setQuestionText(q.question);
+      setDifficulty(q.difficulty);
+      setCategory(q.category || '');
+      setExplanation(q.explanation || '');
+      setPoints(q.points);
+      setIsMultipleAnswer(q.isMultipleAnswer || false);
+      setCorrectAnswers(q.correctAnswers || [0]);
 
-      setQuestion(foundQuestion)
-      setFormData({
-        question: foundQuestion.question,
-        options: foundQuestion.options,
-        correctAnswer: foundQuestion.correctAnswer || 0,
-        difficulty: foundQuestion.difficulty,
-        category: foundQuestion.category,
-        explanation: foundQuestion.explanation || '',
-        points: foundQuestion.points,
-      })
-    } catch (err: any) {
-      setError('Erreur lors du chargement de la question')
-      console.error(err)
+      // Normaliser les options au format {id, text}
+      const normalized: QuestionOption[] = (q.options || []).map((opt, i) =>
+        typeof opt === 'object' && 'text' in opt
+          ? { id: i, text: (opt as QuestionOption).text }
+          : { id: i, text: String(opt) }
+      );
+      setOptions(normalized.length >= 2 ? normalized : [{ id: 0, text: '' }, { id: 1, text: '' }]);
+    } catch {
+      setError('Erreur lors du chargement de la question');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
+  const addOption = () => {
+    if (options.length >= 6) return;
+    setOptions(prev => [...prev, { id: prev.length, text: '' }]);
+  };
+
+  const removeOption = (idx: number) => {
+    if (options.length <= 2) return;
+    const newOptions = options
+      .filter((_, i) => i !== idx)
+      .map((opt, i) => ({ ...opt, id: i }));
+    const newCorrect = correctAnswers
+      .filter(ci => ci !== idx)
+      .map(ci => (ci > idx ? ci - 1 : ci));
+    setOptions(newOptions);
+    setCorrectAnswers(newCorrect.length > 0 ? newCorrect : [0]);
+  };
+
+  const updateOption = (idx: number, text: string) => {
+    setOptions(prev => prev.map((opt, i) => (i === idx ? { ...opt, text } : opt)));
+  };
+
+  const toggleCorrectAnswer = (idx: number) => {
+    if (isMultipleAnswer) {
+      setCorrectAnswers(prev =>
+        prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+      );
+    } else {
+      setCorrectAnswers([idx]);
+    }
+  };
+
+  const toggleMultipleAnswer = (val: boolean) => {
+    setIsMultipleAnswer(val);
+    if (!val) setCorrectAnswers(correctAnswers.length > 0 ? [correctAnswers[0]] : [0]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setError(''); setSuccess('');
 
-    // Validation
-    if (!formData.question.trim()) {
-      setError('La question est requise')
-      return
-    }
-
-    if (formData.options.some(opt => !opt.trim())) {
-      setError('Toutes les options doivent être remplies')
-      return
-    }
-
-    if (!formData.category) {
-      setError('La catégorie est requise')
-      return
-    }
+    if (!questionText.trim()) { setError('La question est requise'); return; }
+    if (options.some(opt => !opt.text.trim())) { setError('Toutes les options doivent être remplies'); return; }
+    if (correctAnswers.length === 0) { setError('Sélectionnez au moins une bonne réponse'); return; }
 
     try {
-      setSaving(true)
-      await qcmApi.updateQuestion(questionId, formData)
-      setSuccess('Question mise à jour avec succès !')
-      setTimeout(() => {
-        router.push('/admin/qcm')
-      }, 1500)
+      setSaving(true);
+      await qcmApi.updateQuestion(questionId, {
+        question: questionText,
+        options,
+        correctAnswers,
+        isMultipleAnswer,
+        difficulty,
+        category,
+        explanation: explanation || undefined,
+        points,
+      });
+      setSuccess('Question mise à jour avec succès !');
+      setTimeout(() => router.push('/admin/qcm'), 1200);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erreur lors de la mise à jour')
+      setError(err.response?.data?.detail || 'Erreur lors de la mise à jour');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleDelete = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette question ? Cette action est irréversible.')) {
-      return
-    }
-
+    if (!confirm('Supprimer cette question ? Cette action est irréversible.')) return;
     try {
-      setDeleting(true)
-      await qcmApi.deleteQuestion(questionId)
-      router.push('/admin/qcm')
+      setDeleting(true);
+      await qcmApi.deleteQuestion(questionId);
+      router.push('/admin/qcm');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erreur lors de la suppression')
-      setDeleting(false)
+      setError(err.response?.data?.detail || 'Erreur lors de la suppression');
+      setDeleting(false);
     }
-  }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-ioai-green" />
       </div>
-    )
+    );
   }
 
-  if (!question) {
+  if (error && options.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
-          <AlertCircle className="h-5 w-5 inline mr-2" />
-          Question non trouvée
+      <div className="max-w-3xl">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-sm">
+          <AlertCircle className="h-5 w-5 inline mr-2" />{error}
         </div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* Header */}
-      <div className="mb-6">
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center gap-4">
         <button
           onClick={() => router.push('/admin/qcm')}
-          className="flex items-center text-gray-600 hover:text-ioai-green mb-4"
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 mr-2" />
-          Retour aux questions
+          <ArrowLeft size={24} />
         </button>
-        <h1 className="text-3xl font-black text-gray-900">Modifier la question</h1>
-        <p className="text-gray-600 mt-2">ID: {questionId}</p>
+        <div>
+          <h1 className="text-3xl font-display font-black text-gray-900">Modifier la question</h1>
+          <p className="text-gray-400 text-xs mt-1 font-mono">{questionId}</p>
+        </div>
       </div>
 
-      {/* Alerts */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
-          <AlertCircle className="h-5 w-5 inline mr-2" />
-          {error}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
+          <AlertCircle className="h-4 w-4 inline mr-2" />{error}
         </div>
       )}
-
       {success && (
-        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 text-green-800">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-green-800 text-sm">
           ✓ {success}
         </div>
       )}
 
-      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-          {/* Question */}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Question *
-            </label>
-            <textarea
-              value={formData.question}
-              onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-              rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-              required
-            />
-          </div>
-
-          {/* Options */}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Options de réponse *
-            </label>
-            <div className="space-y-3">
-              {formData.options.map((option, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="correctAnswer"
-                    checked={formData.correctAnswer === index}
-                    onChange={() => setFormData({ ...formData, correctAnswer: index })}
-                    className="w-4 h-4 text-ioai-green"
-                  />
-                  <input
-                    type="text"
-                    value={option}
-                    onChange={(e) => {
-                      const newOptions = [...formData.options]
-                      newOptions[index] = e.target.value
-                      setFormData({ ...formData, options: newOptions })
-                    }}
-                    placeholder={`Option ${index + 1}`}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                    required
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="text-sm text-gray-500 mt-2">
-              Sélectionnez la bonne réponse en cochant le bouton radio
-            </p>
-          </div>
-
-          {/* Metadata Grid */}
+        {/* Métadonnées */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-bold text-gray-900 mb-4">Informations</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Difficulty */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Difficulté *
-              </label>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Catégorie</label>
+              <input
+                type="text"
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                placeholder="Ex: Mathématiques, IA..."
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ioai-blue text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Difficulté</label>
               <select
-                value={formData.difficulty}
-                onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                required
+                value={difficulty}
+                onChange={e => setDifficulty(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ioai-blue text-sm"
               >
-                {DIFFICULTY_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {DIFFICULTY_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             </div>
-
-            {/* Category */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Catégorie *
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                required
-              >
-                <option value="">Sélectionner...</option>
-                {CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Points */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Points
-              </label>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Points</label>
               <input
                 type="number"
-                min="1"
-                max="10"
-                value={formData.points}
-                onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ioai-green focus:border-transparent"
+                value={points}
+                onChange={e => setPoints(parseInt(e.target.value) || 1)}
+                min={1} max={10}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ioai-blue text-sm"
               />
             </div>
           </div>
+        </div>
 
-          {/* Explanation */}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Explication (optionnel)
+        {/* Texte de la question */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-bold text-gray-900 mb-3">Question <span className="text-red-500">*</span></h2>
+          <textarea
+            value={questionText}
+            onChange={e => setQuestionText(e.target.value)}
+            rows={3}
+            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ioai-blue resize-none text-sm"
+          />
+        </div>
+
+        {/* Options */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-gray-900">
+              Options
+              <span className="ml-2 text-sm font-normal text-gray-400">{options.length} / 6 max</span>
+            </h2>
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isMultipleAnswer}
+                onChange={e => toggleMultipleAnswer(e.target.checked)}
+                className="w-4 h-4 text-ioai-green rounded"
+              />
+              Réponses multiples
             </label>
-            <textarea
-              value={formData.explanation}
-              onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
-              rows={3}
-              placeholder="Explication de la réponse correcte..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-            />
           </div>
+
+          <div className="space-y-3">
+            {options.map((opt, idx) => {
+              const isCorrect = correctAnswers.includes(idx);
+              return (
+                <div key={opt.id} className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleCorrectAnswer(idx)}
+                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center border-2 transition-colors ${
+                      isCorrect
+                        ? 'bg-ioai-green border-ioai-green text-white'
+                        : 'border-gray-300 text-gray-300 hover:border-ioai-green'
+                    }`}
+                  >
+                    {isMultipleAnswer ? <CheckSquare size={13} /> : <Circle size={13} />}
+                  </button>
+                  <span className={`shrink-0 w-6 text-sm font-bold ${isCorrect ? 'text-ioai-green' : 'text-gray-400'}`}>
+                    {String.fromCharCode(65 + idx)}.
+                  </span>
+                  <input
+                    type="text"
+                    value={opt.text}
+                    onChange={e => updateOption(idx, e.target.value)}
+                    placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                    className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-ioai-blue transition-colors ${
+                      isCorrect ? 'border-green-400 bg-green-50' : 'border-gray-200'
+                    }`}
+                  />
+                  {options.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => removeOption(idx)}
+                      className="shrink-0 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-xs text-gray-400">
+              {isMultipleAnswer ? 'Sélectionnez toutes les bonnes réponses' : 'Sélectionnez une seule bonne réponse'}
+            </p>
+            {options.length < 6 && (
+              <button
+                type="button"
+                onClick={addOption}
+                className="flex items-center gap-1.5 text-sm text-ioai-blue hover:text-blue-700 font-medium"
+              >
+                <Plus size={15} />
+                Ajouter une option
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Explication */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-bold text-gray-900 mb-3">
+            Explication <span className="text-sm font-normal text-gray-400">(optionnel)</span>
+          </h2>
+          <textarea
+            value={explanation}
+            onChange={e => setExplanation(e.target.value)}
+            rows={2}
+            placeholder="Explication de la réponse correcte..."
+            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ioai-blue resize-none text-sm"
+          />
         </div>
 
         {/* Actions */}
@@ -292,30 +334,21 @@ export default function EditQuestionPage() {
             type="button"
             onClick={handleDelete}
             disabled={deleting}
-            className="flex items-center gap-2 px-6 py-3 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-3 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 text-sm"
           >
-            {deleting ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Trash2 className="h-5 w-5" />
-            )}
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             Supprimer
           </button>
-
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 px-8 py-3 bg-ioai-green text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-8 py-3 bg-ioai-green text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 text-sm font-medium"
           >
-            {saving ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Save className="h-5 w-5" />
-            )}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Enregistrer
           </button>
         </div>
       </form>
     </div>
-  )
+  );
 }

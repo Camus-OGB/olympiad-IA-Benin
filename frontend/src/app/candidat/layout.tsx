@@ -15,6 +15,7 @@ export default function CandidateLayout({
   const [isUserMenuOpen, setUserMenuOpen] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
@@ -22,13 +23,21 @@ export default function CandidateLayout({
 
   // Protection: Rediriger si non authentifié
   useEffect(() => {
-    console.log('CandidateLayout - Auth check:', { isLoading, user: user?.email, pathname });
-    if (!isLoading && !user) {
-      console.log('CandidateLayout - Redirecting to login...');
-      // Utiliser replace pour éviter l'historique
-      window.location.href = '/auth/connexion?redirect=' + encodeURIComponent(pathname);
+    // Attendre que l'authentification soit vérifiée (isLoading = false)
+    if (isLoading) {
+      console.log('CandidateLayout - Still loading auth...');
+      return;
     }
-  }, [user, isLoading, pathname]);
+
+    // Marquer qu'on a vérifié au moins une fois
+    setHasCheckedAuth(true);
+
+    console.log('CandidateLayout - Auth check:', { isLoading, user: user?.email, pathname });
+    if (!user) {
+      console.log('CandidateLayout - No user found, redirecting to login');
+      router.push('/auth/connexion?redirect=' + encodeURIComponent(pathname));
+    }
+  }, [user, isLoading, pathname, router]);
 
   // Close user menu when clicking outside - DOIT ÊTRE AVANT LE RETURN CONDITIONNEL
   useEffect(() => {
@@ -71,13 +80,28 @@ export default function CandidateLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]); // Vérifier uniquement quand user change
 
-  // Afficher un loader pendant la vérification
-  if (isLoading || !user) {
+  // Afficher un loader pendant la vérification initiale
+  // Ne pas afficher le loader après la première vérification pour éviter les flashs
+  if (isLoading || !hasCheckedAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ioai-blue mx-auto mb-4"></div>
           <p className="text-gray-600">Vérification de l'authentification...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si on arrive ici, c'est que hasCheckedAuth = true et isLoading = false
+  // Si user est null, l'effet ci-dessus va rediriger
+  // On affiche quand même un loader pour éviter un flash
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ioai-blue mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirection...</p>
         </div>
       </div>
     );

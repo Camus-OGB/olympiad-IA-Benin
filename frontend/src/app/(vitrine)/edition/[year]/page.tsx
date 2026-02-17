@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, MapPin, CheckCircle, ChevronDown, ChevronUp, ArrowRight, Sparkles, Brain, Users, Trophy, Globe, Target, Clock, Flag, Star, Zap, BookOpen, Award, Image, Newspaper, ExternalLink, Play } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, notFound } from 'next/navigation';
+import { contentApi, FAQItem } from '@/lib/api/content';
 
 // Mock data pour les éditions
 const editionsData: Record<string, any> = {
@@ -16,10 +17,8 @@ const editionsData: Record<string, any> = {
       heroImage: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1920&auto=format&fit=crop',
       description: 'Première édition de l\'Olympiade Africaine d\'Intelligence Artificielle (AOAI). Le Bénin sélectionne ses meilleurs talents pour représenter le pays à Sousse !',
       stats: {
-         participants: '500+',
          regions: '12',
-         places: '4',
-         countries: '40+'
+         places: '4'
       },
       phases: [
          { id: 1, title: "Inscriptions & Sensibilisation", date: "Janvier - Février 2026", description: "Lancement de la plateforme, tournées dans les lycées, et enregistrement des candidats.", status: "current", criteria: ["Être élève en 2nde, 1ère ou Terminale", "Moins de 20 ans"], icon: "Users" },
@@ -107,9 +106,81 @@ const EditionPage: React.FC = () => {
    const [visiblePhases, setVisiblePhases] = useState<number[]>([]);
    const phaseRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+   const [faqs, setFaqs] = useState<FAQItem[]>([]);
+
+   const [activeEdition, setActiveEdition] = useState<any | null>(null);
+   const [activeEditionLoaded, setActiveEditionLoaded] = useState(false);
+
+   useEffect(() => {
+      const loadFaqs = async () => {
+         try {
+            const data = await contentApi.getFAQ({ publishedOnly: true });
+            setFaqs(data);
+         } catch {
+            setFaqs([]);
+         }
+      };
+
+      loadFaqs();
+   }, []);
+
+   useEffect(() => {
+      const loadActiveEdition = async () => {
+         try {
+            const data = await contentApi.getActiveEdition();
+            setActiveEdition(data);
+         } catch {
+            setActiveEdition(null);
+         } finally {
+            setActiveEditionLoaded(true);
+         }
+      };
+
+      loadActiveEdition();
+   }, []);
+
    if (!edition) {
       notFound();
    }
+
+   const isActiveEditionYear = activeEdition && String(activeEdition.year) === String(year);
+
+   const phasesForUI = (() => {
+      // Pendant le chargement de l'édition active, ne rien afficher
+      if (!activeEditionLoaded) return [];
+      // Si c'est l'année de l'édition active, utiliser uniquement les données BDD
+      if (isActiveEditionYear) {
+         const now = new Date();
+         return (activeEdition.timelinePhases || [])
+            .slice()
+            .sort((a: any, b: any) => (a.phaseOrder ?? 0) - (b.phaseOrder ?? 0))
+            .map((p: any) => {
+               const start = p.startDate ? new Date(p.startDate) : null;
+               const end = p.endDate ? new Date(p.endDate) : null;
+
+               const isUpcoming = start ? start.getTime() > now.getTime() : false;
+               const status = p.isCurrent ? 'current' : isUpcoming ? 'upcoming' : 'completed';
+
+               const dateLabel = (() => {
+                  const fmt = (d: Date) => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+                  if (start && end) return `${fmt(start)} → ${fmt(end)}`;
+                  if (start) return fmt(start);
+                  if (end) return fmt(end);
+                  return '';
+               })();
+
+               return {
+                  id: p.phaseOrder,
+                  title: p.title,
+                  description: p.description,
+                  date: dateLabel,
+                  status,
+               };
+            });
+      }
+      // Pour les éditions passées (non actives), utiliser les phases mock
+      return edition.phases || [];
+   })();
 
    useEffect(() => {
       const observer = new IntersectionObserver(
@@ -227,6 +298,7 @@ const EditionPage: React.FC = () => {
          </section>
 
          {/* Timeline */}
+         {phasesForUI.length > 0 && (
          <section id="parcours" className="py-20 bg-gradient-to-b from-white to-gray-50/50">
          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12 animate-fade-in">
@@ -239,14 +311,22 @@ const EditionPage: React.FC = () => {
                </h2>
                <p className="text-gray-600 text-lg max-w-2xl mx-auto">
                   {isCompleted 
-                     ? `Retour sur les ${edition.phases.length} phases qui ont mené nos champions à ${edition.aoaiLocation}.`
-                     : `${edition.phases.length} phases de janvier à juillet ${edition.year} pour sélectionner l'équipe nationale.`
+                     ? `Retour sur les ${phasesForUI.length} phases qui ont mené nos champions à ${edition.aoaiLocation}.`
+                     : (() => {
+                        // Calcul dynamique des bornes de dates depuis les phases BDD
+                        const datesStart = phasesForUI.map((p: any) => p.date?.split(' → ')[0]).filter(Boolean);
+                        const datesEnd = phasesForUI.map((p: any) => p.date?.split(' → ')[1] || p.date?.split(' → ')[0]).filter(Boolean);
+                        const rangeLabel = (datesStart.length > 0 && datesEnd.length > 0)
+                           ? `de ${datesStart[0]} à ${datesEnd[datesEnd.length - 1]}`
+                           : `en ${edition.year}`;
+                        return `${phasesForUI.length} phase${phasesForUI.length > 1 ? 's' : ''} ${rangeLabel} pour sélectionner l'équipe nationale.`;
+                     })()
                   }
                </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {edition.phases.map((phase: any, index: number) => (
+               {phasesForUI.map((phase: any, index: number) => (
                   <div
                      key={phase.id}
                      ref={(el) => { phaseRefs.current[index] = el; }}
@@ -284,21 +364,26 @@ const EditionPage: React.FC = () => {
                      <p className="text-gray-600 text-sm mb-4 leading-relaxed">{phase.description}</p>
 
                      <div className="border-t border-gray-100 pt-4">
-                        <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">Critères</p>
-                        <ul className="space-y-2">
-                           {phase.criteria.map((c: string, i: number) => (
-                              <li key={i} className="text-xs text-gray-600 flex items-start">
-                                 <CheckCircle className="w-3.5 h-3.5 text-ioai-green mr-2 mt-0.5 shrink-0" />
-                                 <span>{c}</span>
-                              </li>
-                           ))}
-                        </ul>
+                        {Array.isArray(phase.criteria) && phase.criteria.length > 0 && (
+                           <>
+                              <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">Critères</p>
+                              <ul className="space-y-2">
+                                 {phase.criteria.map((c: string, i: number) => (
+                                    <li key={i} className="text-xs text-gray-600 flex items-start">
+                                       <CheckCircle className="w-3.5 h-3.5 text-ioai-green mr-2 mt-0.5 shrink-0" />
+                                       <span>{c}</span>
+                                    </li>
+                                 ))}
+                              </ul>
+                           </>
+                        )}
                      </div>
                   </div>
                ))}
             </div>
          </div>
          </section>
+         )}
 
          {/* Section Avantages (pour édition en cours) */}
          {edition.highlights && !isCompleted && (
@@ -432,8 +517,8 @@ const EditionPage: React.FC = () => {
             </div>
          )}
 
-         {/* FAQ - Seulement pour éditions en cours */}
-         {edition.faqs && !isCompleted && (
+         {/* FAQ */}
+         {!isCompleted && faqs.length > 0 && (
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-20" id="faq">
                <div className="text-center mb-12">
                   <h2 className="text-3xl font-display font-black text-gray-900 mb-3">Questions Fréquentes</h2>
@@ -441,14 +526,17 @@ const EditionPage: React.FC = () => {
                </div>
 
                <div className="space-y-3">
-                  {edition.faqs.map((faq: any, index: number) => (
+                  {faqs
+                     .slice()
+                     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                     .map((faq, index: number) => (
                      <div key={index} className="card rounded-xl overflow-hidden hover:shadow-xl transition-all duration-500 hover:-translate-y-1">
                         <button
                            onClick={() => setOpenFaq(openFaq === index ? null : index)}
                            className="w-full text-left p-6 flex justify-between items-start gap-4 group"
                         >
                            <h3 className="font-bold text-base text-gray-900 group-hover:text-ioai-green transition-colors duration-300 flex-1">
-                              {faq.q}
+                              {faq.question}
                            </h3>
                            <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
                               openFaq === index ? 'bg-gradient-to-br from-ioai-green to-teal-500 text-white rotate-180 scale-110 shadow-lg shadow-ioai-green/30' : 'bg-gray-100 text-gray-400 group-hover:bg-ioai-green/10 group-hover:text-ioai-green'
@@ -459,7 +547,7 @@ const EditionPage: React.FC = () => {
                         <div className={`overflow-hidden transition-all duration-500 ${openFaq === index ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'}`}>
                            <div className="px-6 pb-6 pt-0">
                               <div className="border-t border-gray-100 pt-4">
-                                 <p className="text-gray-600 leading-relaxed">{faq.a}</p>
+                                 <p className="text-gray-600 leading-relaxed">{faq.answer}</p>
                               </div>
                            </div>
                         </div>
@@ -467,195 +555,6 @@ const EditionPage: React.FC = () => {
                   ))}
                </div>
             </div>
-         )}
-
-         {/* Ressources - Seulement pour éditions en cours */}
-         {!isCompleted && (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-20" id="ressources">
-               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div className="card p-8 hover:shadow-2xl transition-all duration-700 hover:-translate-y-2 group">
-                     <div className="flex items-center gap-3 mb-6">
-                        <div className="w-12 h-12 rounded-xl bg-ioai-green/10 flex items-center justify-center group-hover:scale-110 transition-all duration-500">
-                           <Brain className="w-6 h-6 text-ioai-green" />
-                        </div>
-                        <h3 className="text-xl font-bold text-ioai-blue">Ressources de préparation</h3>
-                     </div>
-                     <p className="text-gray-600 mb-6">Pour vous préparer efficacement :</p>
-                     <ul className="space-y-3">
-                        <li className="flex items-start text-gray-600">
-                           <CheckCircle className="w-5 h-5 text-ioai-green mr-3 mt-0.5 shrink-0" />
-                           <span><strong>Tutoriels Python</strong> — Cours gratuits</span>
-                        </li>
-                        <li className="flex items-start text-gray-600">
-                           <CheckCircle className="w-5 h-5 text-ioai-green mr-3 mt-0.5 shrink-0" />
-                           <span><strong>Exercices de logique</strong> — Problèmes types</span>
-                        </li>
-                        <li className="flex items-start text-gray-600">
-                           <CheckCircle className="w-5 h-5 text-ioai-green mr-3 mt-0.5 shrink-0" />
-                           <span><strong>Webinaires</strong> — Sessions avec experts</span>
-                        </li>
-                     </ul>
-                  </div>
-
-                  <div className="card p-8 bg-gradient-to-br from-ioai-blue/5 to-ioai-green/5 hover:shadow-2xl transition-all duration-700 hover:-translate-y-2">
-                     <div className="flex items-center gap-3 mb-6">
-                        <div className="w-12 h-12 rounded-xl bg-ioai-blue/10 flex items-center justify-center">
-                           <Sparkles className="w-6 h-6 text-ioai-blue" />
-                        </div>
-                        <h3 className="text-xl font-bold text-ioai-blue">Accompagnement personnalisé</h3>
-                     </div>
-                     <p className="text-gray-600 mb-6">Support tout au long du parcours :</p>
-                     <ul className="space-y-3">
-                        <li className="flex items-start text-gray-600">
-                           <CheckCircle className="w-5 h-5 text-ioai-blue mr-3 mt-0.5 shrink-0" />
-                           <span><strong>Mentorat</strong> — Un mentor dédié</span>
-                        </li>
-                        <li className="flex items-start text-gray-600">
-                           <CheckCircle className="w-5 h-5 text-ioai-blue mr-3 mt-0.5 shrink-0" />
-                           <span><strong>Groupes d'étude</strong> — Sessions collaboratives</span>
-                        </li>
-                        <li className="flex items-start text-gray-600">
-                           <CheckCircle className="w-5 h-5 text-ioai-blue mr-3 mt-0.5 shrink-0" />
-                           <span><strong>Support 7j/7</strong> — Assistance disponible</span>
-                        </li>
-                     </ul>
-                  </div>
-               </div>
-            </div>
-         )}
-
-         {/* Galerie - Seulement pour éditions terminées */}
-         {edition.gallery && isCompleted && (
-            <section id="galerie" className="py-20 bg-gray-50">
-               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <div className="text-center mb-12">
-                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-ioai-blue/10 text-ioai-blue font-bold text-sm mb-4 border border-ioai-blue/20">
-                        <Image className="w-4 h-4" />
-                        Souvenirs
-                     </span>
-                     <h2 className="text-3xl md:text-4xl font-display font-black text-gray-900 mb-3">
-                        Galerie photos
-                     </h2>
-                     <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-                        Les moments forts de notre participation à l&apos;IOAI {edition.year}.
-                     </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {edition.gallery.map((item: any, idx: number) => (
-                        <div key={idx} className="group relative rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500">
-                           <div className="aspect-[4/3] overflow-hidden">
-                              <img 
-                                 src={item.image} 
-                                 alt={item.caption}
-                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                              />
-                           </div>
-                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                           <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-                              <p className="text-white font-medium text-sm">{item.caption}</p>
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               </div>
-            </section>
-         )}
-
-         {/* Communiqués de presse - Seulement pour éditions terminées */}
-         {edition.pressLinks && isCompleted && (
-            <section id="presse" className="py-20 bg-white">
-               <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <div className="text-center mb-12">
-                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-benin-yellow/10 text-benin-yellow font-bold text-sm mb-4 border border-benin-yellow/20">
-                        <Newspaper className="w-4 h-4" />
-                        Revue de presse
-                     </span>
-                     <h2 className="text-3xl md:text-4xl font-display font-black text-gray-900 mb-3">
-                        Dans les médias
-                     </h2>
-                     <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-                        Retrouvez les articles et reportages sur notre participation.
-                     </p>
-                  </div>
-
-                  <div className="space-y-4">
-                     {edition.pressLinks.map((link: any, idx: number) => (
-                        <a 
-                           key={idx}
-                           href={link.url}
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           className="group flex items-center justify-between p-5 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-ioai-green/30 transition-all duration-300"
-                        >
-                           <div className="flex-1">
-                              <h3 className="font-bold text-gray-900 group-hover:text-ioai-green transition-colors mb-1">
-                                 {link.title}
-                              </h3>
-                              <div className="flex items-center gap-3 text-sm text-gray-500">
-                                 <span className="font-medium text-ioai-blue">{link.source}</span>
-                                 <span>•</span>
-                                 <span>{link.date}</span>
-                              </div>
-                           </div>
-                           <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-ioai-green group-hover:text-white transition-all">
-                              <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-white" />
-                           </div>
-                        </a>
-                     ))}
-                  </div>
-               </div>
-            </section>
-         )}
-
-         {/* Témoignages - Seulement pour éditions terminées */}
-         {edition.testimonials && isCompleted && (
-            <section id="temoignages" className="py-20 bg-gray-50">
-               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <div className="text-center mb-12">
-                     <h2 className="text-3xl md:text-4xl font-display font-black text-gray-900 mb-3">
-                        Témoignages des participants
-                     </h2>
-                     <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-                        Découvrez les retours d&apos;expérience de notre équipe.
-                     </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     {edition.testimonials.map((testimonial: any, idx: number) => (
-                        <div key={idx} className="bg-white rounded-xl p-6 shadow-md border border-gray-100">
-                           <div className="flex items-start gap-4 mb-4">
-                              <img 
-                                 src={testimonial.image} 
-                                 alt={testimonial.name}
-                                 className="w-14 h-14 rounded-full object-cover"
-                              />
-                              <div>
-                                 <h3 className="font-bold text-gray-900">{testimonial.name}</h3>
-                                 <p className="text-sm text-ioai-blue">{testimonial.role}</p>
-                              </div>
-                           </div>
-                           
-                           <blockquote className="text-gray-600 italic mb-4">
-                              &ldquo;{testimonial.quote}&rdquo;
-                           </blockquote>
-
-                           {testimonial.videoUrl && (
-                              <a 
-                                 href={testimonial.videoUrl}
-                                 target="_blank"
-                                 rel="noopener noreferrer"
-                                 className="inline-flex items-center gap-2 text-sm font-medium text-ioai-green hover:text-green-600 transition-colors"
-                              >
-                                 <Play className="w-4 h-4" />
-                                 Voir le témoignage vidéo
-                              </a>
-                           )}
-                        </div>
-                     ))}
-                  </div>
-               </div>
-            </section>
          )}
 
       </div>

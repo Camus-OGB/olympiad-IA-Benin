@@ -54,12 +54,15 @@ const VerifyOtp: React.FC = () => {
 
       {/* Form Side */}
       <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24 relative bg-slate-50">
-        <Link href="/mot-de-passe-oublie" className="absolute top-8 left-8 inline-flex items-center text-gray-500 hover:text-ioai-dark-blue transition-colors text-sm font-bold group">
+        <button
+          onClick={() => router.back()}
+          className="absolute top-8 left-8 inline-flex items-center text-gray-500 hover:text-ioai-dark-blue transition-colors text-sm font-bold group"
+        >
            <div className="p-2 bg-white rounded-full mr-3 group-hover:bg-gray-100 transition-colors shadow-sm">
              <ArrowLeft className="w-4 h-4" />
            </div>
            Retour
-        </Link>
+        </button>
 
         <div className="mx-auto w-full max-w-sm lg:w-96">
           <div className="text-center mb-8">

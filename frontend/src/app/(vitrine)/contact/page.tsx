@@ -1,13 +1,29 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Mail, MapPin, Send, Facebook, Linkedin, Twitter, MessageCircle, Phone, ArrowRight, HelpCircle, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
+import { contentApi, FAQItem } from '@/lib/api/content';
 
 const Contact: React.FC = () => {
   const [formState, setFormState] = useState({ name: '', email: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
+
+  const [faqs, setFaqs] = useState<FAQItem[]>([]);
+
+  useEffect(() => {
+    const loadFaqs = async () => {
+      try {
+        const data = await contentApi.getFAQ({ publishedOnly: true });
+        setFaqs(data);
+      } catch {
+        setFaqs([]);
+      }
+    };
+
+    loadFaqs();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,11 +36,10 @@ const Contact: React.FC = () => {
     }, 1500);
   };
 
-  const faqs = [
-    { question: "Les inscriptions sont-elles gratuites ?", answer: "Oui, la participation aux Olympiades est entièrement gratuite pour tous les élèves béninois éligibles." },
-    { question: "Puis-je participer si je suis en Terminale ?", answer: "Absolument. Le concours est ouvert aux élèves de la Seconde à la Terminale âgés de 16 à 20 ans." },
-    { question: "Où se déroule la phase finale ?", answer: "La sélection nationale se fait en ligne et en présentiel à Cotonou. La finale internationale aura lieu à Sousse, en Tunisie." },
-  ];
+  const faqsPreview = faqs.slice(0, 3).map(f => ({
+    question: f.question,
+    answer: f.answer,
+  }));
 
   return (
     <div className="bg-[#f8f9fc] min-h-screen">
@@ -212,7 +227,7 @@ const Contact: React.FC = () => {
           <h2 className="text-3xl font-display font-bold text-gray-900 mb-8">Questions Fréquentes</h2>
 
           <div className="space-y-4 text-left">
-            {faqs.map((faq, idx) => (
+            {faqsPreview.map((faq, idx) => (
               <div key={idx} className="border border-gray-100 rounded-xl overflow-hidden hover:border-ioai-green/30 transition-colors">
                 <button
                   onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}

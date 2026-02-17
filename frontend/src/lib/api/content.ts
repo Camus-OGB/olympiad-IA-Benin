@@ -17,6 +17,7 @@ export interface NewsItem {
     category?: string
     isPublished: boolean
     publishedAt?: string
+    externalUrl?: string  // Lien vers l'article original
     createdAt: string
     updatedAt: string
 }
@@ -28,6 +29,7 @@ export interface NewsCreate {
     imageUrl?: string
     category?: string
     isPublished?: boolean
+    externalUrl?: string  // Lien vers l'article original
 }
 
 export interface NewsUpdate {
@@ -37,6 +39,7 @@ export interface NewsUpdate {
     imageUrl?: string
     category?: string
     isPublished?: boolean
+    externalUrl?: string  // Lien vers l'article original
 }
 
 // ==================== FAQ ====================
@@ -77,6 +80,15 @@ export interface TimelinePhase {
     startDate?: string
     endDate?: string
     isCurrent: boolean
+}
+
+export interface TimelinePhaseCreate {
+    phaseOrder: number
+    title: string
+    description?: string
+    startDate?: string
+    endDate?: string
+    isCurrent?: boolean
 }
 
 export interface CalendarEvent {
@@ -148,11 +160,51 @@ export interface GalleryImage {
 
 export interface Testimonial {
     id: string
+    studentName: string
+    school?: string
+    role?: string
+    quote: string
+    imageUrl?: string
+    pastEditionId?: string
+}
+
+// ==================== GENERAL TESTIMONIALS ====================
+
+export interface GeneralTestimonial {
+    id: string
     authorName: string
     authorRole?: string
+    authorType?: string  // "mentor", "parent", "sponsor", "partner"
     content: string
-    videoUrl?: string
     photoUrl?: string
+    videoUrl?: string
+    organization?: string
+    displayOrder?: number
+    isPublished: boolean
+}
+
+export interface GeneralTestimonialCreate {
+    authorName: string
+    authorRole?: string
+    authorType?: string
+    content: string
+    photoUrl?: string
+    videoUrl?: string
+    organization?: string
+    displayOrder?: number
+    isPublished?: boolean
+}
+
+export interface GeneralTestimonialUpdate {
+    authorName?: string
+    authorRole?: string
+    authorType?: string
+    content?: string
+    photoUrl?: string
+    videoUrl?: string
+    organization?: string
+    displayOrder?: number
+    isPublished?: boolean
 }
 
 export interface Achievement {
@@ -262,6 +314,29 @@ export interface PageUpdate {
     isPublished?: boolean
 }
 
+// ==================== NEXT DEADLINE ====================
+
+export interface NextDeadline {
+    phaseTitle: string
+    phaseDescription?: string
+    targetDate: string
+    targetType: 'start' | 'end'
+    currentPhase?: {
+        title: string
+        isActive: boolean
+        startDate?: string
+        endDate?: string
+    }
+    editionYear: number
+}
+
+// ==================== PUBLIC STATS ====================
+
+export interface PublicStats {
+    totalCandidates: number
+    verifiedCandidates: number
+}
+
 // ==================== API CALLS ====================
 
 export const contentApi = {
@@ -367,6 +442,15 @@ export const contentApi = {
     },
 
     /**
+     * Récupérer la prochaine deadline pour le compte à rebours
+     * GET /content/editions/active/next-deadline
+     */
+    getNextDeadline: async (): Promise<NextDeadline | null> => {
+        const { data } = await apiClient.get('/content/editions/active/next-deadline')
+        return data
+    },
+
+    /**
      * Liste de toutes les éditions
      * GET /content/editions
      */
@@ -405,6 +489,34 @@ export const contentApi = {
         return data
     },
 
+    // ==================== PHASES D'ÉDITION ====================
+
+    /**
+     * Créer une phase pour une édition (Admin)
+     * POST /content/editions/:editionId/phases
+     */
+    createEditionPhase: async (editionId: string, phaseData: TimelinePhaseCreate): Promise<TimelinePhase> => {
+        const { data } = await apiClient.post(`/content/editions/${editionId}/phases`, phaseData)
+        return data
+    },
+
+    /**
+     * Mettre à jour une phase (Admin)
+     * PUT /content/editions/:editionId/phases/:phaseId
+     */
+    updateEditionPhase: async (editionId: string, phaseId: string, phaseData: TimelinePhaseCreate): Promise<TimelinePhase> => {
+        const { data } = await apiClient.put(`/content/editions/${editionId}/phases/${phaseId}`, phaseData)
+        return data
+    },
+
+    /**
+     * Supprimer une phase (Admin)
+     * DELETE /content/editions/:editionId/phases/:phaseId
+     */
+    deleteEditionPhase: async (editionId: string, phaseId: string): Promise<void> => {
+        await apiClient.delete(`/content/editions/${editionId}/phases/${phaseId}`)
+    },
+
     // ==================== ÉDITIONS PASSÉES ====================
 
     /**
@@ -441,6 +553,18 @@ export const contentApi = {
     updatePastEdition: async (editionId: string, editionData: PastEditionUpdate): Promise<PastEdition> => {
         const { data } = await apiClient.put(`/content/past-editions/${editionId}`, editionData)
         return data
+    },
+
+    /**
+     * Récupérer les témoignages de l'édition la plus récente
+     * Affiche automatiquement les témoignages de la dernière édition sur la page d'accueil
+     */
+    /**
+     * Récupérer tous les témoignages généraux pour la page d'accueil
+     * Utilise les témoignages généraux (mentors, parents, sponsors, etc.)
+     */
+    getAllTestimonials: async (): Promise<GeneralTestimonial[]> => {
+        return contentApi.getGeneralTestimonials(true)
     },
 
     // ==================== PARTENAIRES ====================
@@ -528,5 +652,169 @@ export const contentApi = {
      */
     deletePage: async (pageId: string): Promise<void> => {
         await apiClient.delete(`/content/pages/${pageId}`)
+    },
+
+    // ==================== STATS PUBLIQUES ====================
+
+    /**
+     * Récupérer les statistiques publiques pour le site vitrine
+     * GET /content/public-stats
+     */
+    getPublicStats: async (): Promise<PublicStats> => {
+        const { data } = await apiClient.get('/content/public-stats')
+        return data
+    },
+
+    // ==================== PAST EDITION TIMELINE PHASES ====================
+
+    /**
+     * Créer une phase de timeline pour une édition passée (Admin)
+     * POST /content/past-editions/:editionId/timeline
+     */
+    createTimelinePhase: async (editionId: string, phaseData: {
+        phaseOrder: number;
+        title: string;
+        description?: string;
+        date?: string;
+    }): Promise<PastTimelinePhase> => {
+        const { data } = await apiClient.post(`/content/past-editions/${editionId}/timeline`, phaseData)
+        return data
+    },
+
+    /**
+     * Mettre à jour une phase de timeline (Admin)
+     * PUT /content/past-editions/:editionId/timeline/:phaseId
+     */
+    updateTimelinePhase: async (editionId: string, phaseId: string, phaseData: {
+        phaseOrder: number;
+        title: string;
+        description?: string;
+        date?: string;
+    }): Promise<PastTimelinePhase> => {
+        const { data } = await apiClient.put(`/content/past-editions/${editionId}/timeline/${phaseId}`, phaseData)
+        return data
+    },
+
+    /**
+     * Supprimer une phase de timeline (Admin)
+     * DELETE /content/past-editions/:editionId/timeline/:phaseId
+     */
+    deleteTimelinePhase: async (editionId: string, phaseId: string): Promise<void> => {
+        await apiClient.delete(`/content/past-editions/${editionId}/timeline/${phaseId}`)
+    },
+
+    // ==================== PAST EDITION GALLERY IMAGES ====================
+
+    /**
+     * Créer une image de galerie pour une édition passée (Admin)
+     * POST /content/past-editions/:editionId/gallery
+     */
+    createGalleryImage: async (editionId: string, imageData: {
+        imageUrl: string;
+        caption?: string;
+        order: number;
+    }): Promise<GalleryImage> => {
+        const { data } = await apiClient.post(`/content/past-editions/${editionId}/gallery`, imageData)
+        return data
+    },
+
+    /**
+     * Mettre à jour une image de galerie (Admin)
+     * PUT /content/past-editions/:editionId/gallery/:imageId
+     */
+    updateGalleryImage: async (editionId: string, imageId: string, imageData: {
+        imageUrl: string;
+        caption?: string;
+        order: number;
+    }): Promise<GalleryImage> => {
+        const { data } = await apiClient.put(`/content/past-editions/${editionId}/gallery/${imageId}`, imageData)
+        return data
+    },
+
+    /**
+     * Supprimer une image de galerie (Admin)
+     * DELETE /content/past-editions/:editionId/gallery/:imageId
+     */
+    deleteGalleryImage: async (editionId: string, imageId: string): Promise<void> => {
+        await apiClient.delete(`/content/past-editions/${editionId}/gallery/${imageId}`)
+    },
+
+    // ==================== PAST EDITION TESTIMONIALS ====================
+
+    /**
+     * Créer un témoignage pour une édition passée (Admin)
+     * POST /content/past-editions/:editionId/testimonials
+     */
+    createTestimonial: async (editionId: string, testimonialData: {
+        studentName: string;
+        school?: string;
+        role?: string;
+        quote: string;
+        imageUrl?: string;
+    }): Promise<Testimonial> => {
+        const { data } = await apiClient.post(`/content/past-editions/${editionId}/testimonials`, testimonialData)
+        return data
+    },
+
+    /**
+     * Mettre à jour un témoignage (Admin)
+     * PUT /content/past-editions/:editionId/testimonials/:testimonialId
+     */
+    updateTestimonial: async (editionId: string, testimonialId: string, testimonialData: {
+        studentName: string;
+        school?: string;
+        role?: string;
+        quote: string;
+        imageUrl?: string;
+    }): Promise<Testimonial> => {
+        const { data } = await apiClient.put(`/content/past-editions/${editionId}/testimonials/${testimonialId}`, testimonialData)
+        return data
+    },
+
+    /**
+     * Supprimer un témoignage (Admin)
+     * DELETE /content/past-editions/:editionId/testimonials/:testimonialId
+     */
+    deleteTestimonial: async (editionId: string, testimonialId: string): Promise<void> => {
+        await apiClient.delete(`/content/past-editions/${editionId}/testimonials/${testimonialId}`)
+    },
+
+    // ==================== GENERAL TESTIMONIALS ====================
+
+    /**
+     * Récupérer tous les témoignages généraux (Public/Admin)
+     * GET /content/general-testimonials
+     */
+    getGeneralTestimonials: async (publishedOnly: boolean = true): Promise<GeneralTestimonial[]> => {
+        const { data } = await apiClient.get('/content/general-testimonials', {
+            params: { published_only: publishedOnly }
+        })
+        return data
+    },
+
+    /**
+     * Créer un témoignage général (Admin)
+     * POST /content/general-testimonials
+     */
+    createGeneralTestimonial: async (testimonialData: GeneralTestimonialCreate): Promise<GeneralTestimonial> => {
+        const { data } = await apiClient.post('/content/general-testimonials', testimonialData)
+        return data
+    },
+
+    /**
+     * Mettre à jour un témoignage général (Admin)
+     * PUT /content/general-testimonials/:testimonialId
+     */
+    updateGeneralTestimonial: async (testimonialId: string, testimonialData: GeneralTestimonialUpdate): Promise<GeneralTestimonial> => {
+        const { data } = await apiClient.put(`/content/general-testimonials/${testimonialId}`, testimonialData)
+        return data
+    },
+
+    /**
+     * Supprimer un témoignage général (Admin)
+     * DELETE /content/general-testimonials/:testimonialId
+     */
+    deleteGeneralTestimonial: async (testimonialId: string): Promise<void> => {
+        await apiClient.delete(`/content/general-testimonials/${testimonialId}`)
     },
 }

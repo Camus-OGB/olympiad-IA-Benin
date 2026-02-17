@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Lock, ArrowRight, BrainCircuit, CheckCircle } from 'lucide-react';
+import { Lock, ArrowRight, ArrowLeft, BrainCircuit, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -35,6 +35,16 @@ const ResetPassword: React.FC = () => {
 
       {/* Form Side */}
       <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24 relative bg-slate-50">
+        <button
+          onClick={() => router.back()}
+          className="absolute top-8 left-8 inline-flex items-center text-gray-500 hover:text-ioai-dark-blue transition-colors text-sm font-bold group"
+        >
+           <div className="p-2 bg-white rounded-full mr-3 group-hover:bg-gray-100 transition-colors shadow-sm">
+             <ArrowLeft className="w-4 h-4" />
+           </div>
+           Retour
+        </button>
+
         <div className="mx-auto w-full max-w-sm lg:w-96">
           <div className="text-center mb-8">
              <div className="w-16 h-16 bg-ioai-dark-blue/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-ioai-dark-blue">

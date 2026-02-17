@@ -2,7 +2,7 @@
 Schémas Pydantic pour le contenu du site vitrine - Section 2
 Adaptés à la structure 3FN
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -18,6 +18,7 @@ class NewsCreate(BaseModel):
     author: Optional[str] = None
     category: Optional[str] = None
     is_published: bool = False
+    external_url: Optional[str] = None  # Lien vers l'article original
 
 
 class NewsUpdate(BaseModel):
@@ -29,6 +30,7 @@ class NewsUpdate(BaseModel):
     author: Optional[str] = None
     category: Optional[str] = None
     is_published: Optional[bool] = None
+    external_url: Optional[str] = None  # Lien vers l'article original
 
 
 class NewsResponse(BaseModel):
@@ -42,8 +44,19 @@ class NewsResponse(BaseModel):
     category: Optional[str]
     is_published: bool
     published_at: Optional[str]
+    external_url: Optional[str]  # Lien vers l'article original
     created_at: str
     updated_at: str
+
+    @field_validator('created_at', 'updated_at', 'published_at', mode='before')
+    @classmethod
+    def convert_datetime_to_str(cls, value):
+        """Convertir datetime en string ISO format"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     class Config:
         from_attributes = True
@@ -78,6 +91,16 @@ class FAQResponse(BaseModel):
     order: int
     is_published: bool
     created_at: str
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime_to_str(cls, value):
+        """Convertir datetime en string ISO format"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     class Config:
         from_attributes = True
@@ -199,6 +222,15 @@ class EditionResponse(BaseModel):
     edition_partners: List[EditionPartnerResponse] = []
     created_at: str
 
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime_to_str(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
     class Config:
         from_attributes = True
 
@@ -245,21 +277,67 @@ class GalleryImageResponse(BaseModel):
 
 class TestimonialCreate(BaseModel):
     """Création d'un témoignage"""
-    author_name: str = Field(..., min_length=2)
-    author_role: Optional[str] = None
-    content: str = Field(..., min_length=10)
-    video_url: Optional[str] = None
-    photo_url: Optional[str] = None
+    student_name: str = Field(..., min_length=2)
+    school: Optional[str] = None
+    role: Optional[str] = None  # Distinction/rôle (ex: "Médaille d'Or")
+    quote: str = Field(..., min_length=10)
+    image_url: Optional[str] = None
 
 
 class TestimonialResponse(BaseModel):
     """Réponse témoignage"""
     id: str
+    student_name: str
+    school: Optional[str]
+    role: Optional[str]
+    quote: str
+    image_url: Optional[str]
+    past_edition_id: Optional[str] = None  # Ajouté pour le contexte
+
+    class Config:
+        from_attributes = True
+
+
+# ==================== GENERAL TESTIMONIALS ====================
+
+class GeneralTestimonialCreate(BaseModel):
+    """Création d'un témoignage général"""
+    author_name: str = Field(..., min_length=2)
+    author_role: Optional[str] = None  # Ex: "Mentor", "Parent", "Sponsor"
+    author_type: Optional[str] = None  # Ex: "mentor", "parent", "sponsor", "partner"
+    content: str = Field(..., min_length=10)
+    photo_url: Optional[str] = None
+    video_url: Optional[str] = None
+    organization: Optional[str] = None
+    display_order: Optional[int] = 0
+    is_published: Optional[bool] = True
+
+
+class GeneralTestimonialUpdate(BaseModel):
+    """Mise à jour d'un témoignage général"""
+    author_name: Optional[str] = Field(None, min_length=2)
+    author_role: Optional[str] = None
+    author_type: Optional[str] = None
+    content: Optional[str] = Field(None, min_length=10)
+    photo_url: Optional[str] = None
+    video_url: Optional[str] = None
+    organization: Optional[str] = None
+    display_order: Optional[int] = None
+    is_published: Optional[bool] = None
+
+
+class GeneralTestimonialResponse(BaseModel):
+    """Réponse témoignage général"""
+    id: str
     author_name: str
     author_role: Optional[str]
+    author_type: Optional[str]
     content: str
-    video_url: Optional[str]
     photo_url: Optional[str]
+    video_url: Optional[str]
+    organization: Optional[str]
+    display_order: Optional[int]
+    is_published: bool
 
     class Config:
         from_attributes = True
@@ -354,6 +432,16 @@ class PastEditionResponse(BaseModel):
     edition_stats: List[EditionStatResponse] = []
     created_at: str
 
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime_to_str(cls, value):
+        """Convertir datetime en string ISO format"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
     class Config:
         from_attributes = True
 
@@ -424,5 +512,28 @@ class PageResponse(BaseModel):
     is_published: bool
     created_at: str
 
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime_to_str(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
     class Config:
         from_attributes = True
+
+
+# === Next Deadline ===
+
+class NextDeadlineResponse(BaseModel):
+    """
+    Prochaine deadline dynamique pour le compte à rebours du site vitrine
+    """
+    phase_title: str  # Ex: "Phase 1 : Inscription"
+    phase_description: Optional[str] = None
+    target_date: str  # ISO datetime de la prochaine deadline
+    target_type: str  # "start" ou "end"
+    current_phase: Optional[Dict[str, Any]] = None  # Phase actuellement en cours si applicable
+    edition_year: int

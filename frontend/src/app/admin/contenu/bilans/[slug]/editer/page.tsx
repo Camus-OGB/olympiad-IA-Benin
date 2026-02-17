@@ -1,22 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Save, ArrowLeft, Upload, MapPin, Calendar, Users, Trophy } from 'lucide-react';
-
-interface BilanFormData {
-  year: string;
-  slug: string;
-  title: string;
-  location: string;
-  date: string;
-  participants: string;
-  finalists: string;
-  ranking: string;
-  medals: string;
-  totalCountries: string;
-  heroImage: string;
-}
+import { Save, ArrowLeft, Upload, MapPin, Calendar, Users, Trophy, Loader2 } from 'lucide-react';
+import { contentApi, PastEdition, PastEditionUpdate } from '@/lib/api/content';
 
 async function uploadImage(file: File, folder: string): Promise<string | null> {
   const formData = new FormData();
@@ -36,33 +23,72 @@ async function uploadImage(file: File, folder: string): Promise<string | null> {
 export default function EditerBilan() {
   const params = useParams();
   const router = useRouter();
-  const slug = params?.slug as string;
+  const editionId = params?.slug as string; // En fait, c'est l'ID de l'édition
 
-  const [formData, setFormData] = useState<BilanFormData>({
-    year: '2025',
-    slug: 'edition-2025',
-    title: 'Édition 2025 - Beijing',
-    location: 'Beijing, Chine',
-    date: 'Août 2025',
-    participants: '700+',
-    finalists: '4',
-    ranking: '30ème',
-    medals: '1 Mention Honorable',
-    totalCountries: '87',
-    heroImage: 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?q=80&w=1920'
+  const [edition, setEdition] = useState<PastEdition | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [formData, setFormData] = useState<{
+    year: number;
+    hostCountry: string;
+    numStudents: number;
+  }>({
+    year: new Date().getFullYear(),
+    hostCountry: '',
+    numStudents: 0,
   });
 
+  const [saving, setSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isUploadingHero, setIsUploadingHero] = useState(false);
   const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
 
-  const handleSave = () => {
-    console.log('Saving bilan:', formData);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+  useEffect(() => {
+    loadEdition();
+  }, [editionId]);
+
+  const loadEdition = async () => {
+    try {
+      setLoading(true);
+      const data = await contentApi.getPastEdition(editionId);
+      setEdition(data);
+      setFormData({
+        year: data.year,
+        hostCountry: data.hostCountry || '',
+        numStudents: data.numStudents || 0,
+      });
+    } catch (error) {
+      console.error('Erreur lors du chargement de l\'édition:', error);
+      alert('Erreur lors du chargement de l\'édition');
+      router.push('/admin/contenu/bilans');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleChange = (field: keyof BilanFormData, value: string) => {
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updateData: PastEditionUpdate = {
+        year: formData.year,
+        hostCountry: formData.hostCountry || undefined,
+        numStudents: formData.numStudents || undefined,
+      };
+
+      await contentApi.updatePastEdition(editionId, updateData);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+
+      // Recharger les données
+      await loadEdition();
+    } catch (error: any) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      alert(error?.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChange = (field: keyof typeof formData, value: string | number) => {
     setFormData({ ...formData, [field]: value });
   };
 
@@ -90,6 +116,27 @@ export default function EditerBilan() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-ioai-blue mx-auto mb-4" />
+          <p className="text-gray-600">Chargement de l'édition...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!edition) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-gray-600">Édition introuvable</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -102,20 +149,30 @@ export default function EditerBilan() {
             Retour aux bilans
           </button>
           <h1 className="text-3xl font-display font-black text-gray-900">
-            Modifier le bilan : {formData.title}
+            Modifier le bilan : Édition {edition.year}
           </h1>
           <p className="text-gray-500 mt-2">Éditez les informations générales de cette édition</p>
         </div>
         <button
           onClick={handleSave}
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl ${
+          disabled={saving}
+          className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 ${
             isSaved
               ? 'bg-green-600 text-white'
               : 'bg-ioai-green text-white hover:bg-green-600'
           }`}
         >
-          <Save size={20} />
-          {isSaved ? 'Enregistré !' : 'Enregistrer'}
+          {saving ? (
+            <>
+              <Loader2 size={20} className="animate-spin" />
+              Enregistrement...
+            </>
+          ) : (
+            <>
+              <Save size={20} />
+              {isSaved ? 'Enregistré !' : 'Enregistrer'}
+            </>
+          )}
         </button>
       </div>
 
@@ -126,122 +183,45 @@ export default function EditerBilan() {
             <h2 className="text-xl font-bold text-gray-900 mb-6">Informations générales</h2>
 
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Année *</label>
-                  <input
-                    type="text"
-                    value={formData.year}
-                    onChange={(e) => handleChange('year', e.target.value)}
-                    placeholder="2025"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Slug URL *</label>
-                  <input
-                    type="text"
-                    value={formData.slug}
-                    onChange={(e) => handleChange('slug', e.target.value)}
-                    placeholder="edition-2025"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent font-mono text-sm"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">URL : /bilan/{formData.slug}</p>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Titre complet *</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Année *</label>
                 <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => handleChange('title', e.target.value)}
-                  placeholder="Édition 2025 - Beijing"
+                  type="number"
+                  value={formData.year}
+                  onChange={(e) => handleChange('year', parseInt(e.target.value) || 0)}
+                  min="2000"
+                  max={new Date().getFullYear()}
+                  placeholder="2025"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    <MapPin className="inline w-4 h-4 mr-1" />
-                    Lieu de la compétition *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => handleChange('location', e.target.value)}
-                    placeholder="Beijing, Chine"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    <Calendar className="inline w-4 h-4 mr-1" />
-                    Date *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.date}
-                    onChange={(e) => handleChange('date', e.target.value)}
-                    placeholder="Août 2025"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-2xl border-2 border-gray-200 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              <Users className="inline w-5 h-5 mr-2" />
-              Statistiques
-            </h2>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Participants</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  <MapPin className="inline w-4 h-4 mr-1" />
+                  Pays hôte
+                </label>
                 <input
                   type="text"
-                  value={formData.participants}
-                  onChange={(e) => handleChange('participants', e.target.value)}
-                  placeholder="700+"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent text-center font-bold"
+                  value={formData.hostCountry}
+                  onChange={(e) => handleChange('hostCountry', e.target.value)}
+                  placeholder="Chine"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Finalistes</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  <Users className="inline w-4 h-4 mr-1" />
+                  Nombre de participants béninois
+                </label>
                 <input
-                  type="text"
-                  value={formData.finalists}
-                  onChange={(e) => handleChange('finalists', e.target.value)}
+                  type="number"
+                  value={formData.numStudents || ''}
+                  onChange={(e) => handleChange('numStudents', parseInt(e.target.value) || 0)}
+                  min="0"
                   placeholder="4"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent text-center font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Classement</label>
-                <input
-                  type="text"
-                  value={formData.ranking}
-                  onChange={(e) => handleChange('ranking', e.target.value)}
-                  placeholder="30ème"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent text-center font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Pays</label>
-                <input
-                  type="text"
-                  value={formData.totalCountries}
-                  onChange={(e) => handleChange('totalCountries', e.target.value)}
-                  placeholder="87"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent text-center font-bold"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
               </div>
             </div>
@@ -250,60 +230,31 @@ export default function EditerBilan() {
           <div className="bg-white p-8 rounded-2xl border-2 border-gray-200 shadow-sm">
             <h2 className="text-xl font-bold text-gray-900 mb-6">
               <Trophy className="inline w-5 h-5 mr-2" />
-              Résultats & Médailles
+              Contenus détaillés
             </h2>
 
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Médailles obtenues</label>
-              <input
-                type="text"
-                value={formData.medals}
-                onChange={(e) => handleChange('medals', e.target.value)}
-                placeholder="1 Mention Honorable"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Ex: "1 Or, 2 Argent, 1 Bronze" ou "1 Mention Honorable"
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-2xl border-2 border-gray-200 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              <Upload className="inline w-5 h-5 mr-2" />
-              Image Hero
-            </h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Fichier image (upload)
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleHeroFileChange}
-                  className="block w-full text-sm text-gray-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-ioai-green/10 file:text-ioai-green hover:file:bg-ioai-green/20"
-                />
-                {isUploadingHero && (
-                  <p className="text-xs text-blue-600 mt-1">Upload en cours...</p>
-                )}
-                {heroUploadError && (
-                  <p className="text-xs text-red-600 mt-1">{heroUploadError}</p>
-                )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <p className="text-sm text-gray-600 mb-1">Témoignages</p>
+                <p className="text-2xl font-bold text-gray-900">{edition.testimonials?.length || 0}</p>
               </div>
-
-              {formData.heroImage && (
-                <div>
-                  <p className="text-sm font-bold text-gray-700 mb-2">Aperçu :</p>
-                  <img
-                    src={formData.heroImage}
-                    alt="Hero preview"
-                    className="w-full h-64 object-cover rounded-xl border-2 border-gray-200"
-                  />
-                </div>
-              )}
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <p className="text-sm text-gray-600 mb-1">Timeline</p>
+                <p className="text-2xl font-bold text-gray-900">{edition.pastTimelinePhases?.length || 0}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <p className="text-sm text-gray-600 mb-1">Photos</p>
+                <p className="text-2xl font-bold text-gray-900">{edition.galleryImages?.length || 0}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <p className="text-sm text-gray-600 mb-1">Résultats</p>
+                <p className="text-2xl font-bold text-gray-900">{edition.achievements?.length || 0}</p>
+              </div>
             </div>
+
+            <p className="text-sm text-gray-500 mt-4">
+              Utilisez les liens dans le menu de gauche pour gérer ces contenus en détail.
+            </p>
           </div>
         </div>
 
@@ -319,26 +270,25 @@ export default function EditerBilan() {
                   <p className="text-2xl font-bold">{formData.year}</p>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <p className="text-xs text-gray-600 mb-1">Lieu</p>
-                  <p className="font-bold text-gray-900">{formData.location}</p>
-                </div>
+                {formData.hostCountry && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <p className="text-xs text-gray-600 mb-1">Pays hôte</p>
+                    <p className="font-bold text-gray-900">{formData.hostCountry}</p>
+                  </div>
+                )}
 
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <p className="text-xs text-gray-600 mb-1">Classement</p>
-                  <p className="font-bold text-gray-900">{formData.ranking}</p>
-                </div>
-
-                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 p-4 rounded-xl">
-                  <p className="text-xs text-gray-600 mb-1">Médailles</p>
-                  <p className="font-bold text-gray-900">{formData.medals}</p>
-                </div>
+                {formData.numStudents > 0 && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <p className="text-xs text-gray-600 mb-1">Participants</p>
+                    <p className="font-bold text-gray-900">{formData.numStudents}</p>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
               <p className="text-xs text-blue-800 leading-relaxed">
-                <strong>💡 Conseil :</strong> Après avoir sauvegardé les informations générales, n'oubliez pas de gérer l'équipe, la timeline et la galerie photos.
+                <strong>💡 Conseil :</strong> Après avoir sauvegardé les informations générales, utilisez les boutons dans la liste des bilans pour gérer la timeline, les témoignages et la galerie photos.
               </p>
             </div>
           </div>

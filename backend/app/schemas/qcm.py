@@ -1,20 +1,52 @@
 """
 Schémas Pydantic pour les QCM
+AMÉLIORÉ : Support de nombre flexible de réponses et catégories
 """
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
+
+
+# ==================== QUESTION OPTION ====================
+
+class QuestionOption(BaseModel):
+    """Une option de réponse"""
+    text: str = Field(..., min_length=1, description="Texte de l'option")
+    id: int = Field(..., ge=0, description="ID de l'option (index)")
 
 
 # ==================== QUESTIONS ====================
 
 class QuestionCreate(BaseModel):
-    """Création d'une question"""
+    """Création d'une question flexible (2-6 réponses)"""
     question: str = Field(..., min_length=10, description="Texte de la question")
-    options: List[str] = Field(..., min_length=4, max_length=4, description="4 options de réponse")
-    correct_answer: int = Field(..., ge=0, le=3, description="Index de la bonne réponse (0-3)")
+
+    # ⭐ FLEXIBLE: 2 à 6 options
+    options: List[QuestionOption] = Field(
+        ...,
+        min_length=2,
+        max_length=6,
+        description="2 à 6 options de réponse"
+    )
+
+    # ⭐ FLEXIBLE: Réponses simples [0] ou multiples [0, 2]
+    correct_answers: List[int] = Field(
+        ...,
+        min_length=1,
+        description="Index des bonnes réponses (au moins 1)"
+    )
+
+    is_multiple_answer: bool = Field(
+        False,
+        description="True si plusieurs réponses possibles"
+    )
+
     difficulty: str = Field(..., description="Difficulté: easy, medium, hard")
-    category: Optional[str] = Field(None, description="Catégorie de la question")
+
+    # Catégorie par ID (nouvelle) ou par texte (legacy)
+    category_id: Optional[str] = Field(None, description="ID de la catégorie")
+    category: Optional[str] = Field(None, description="Nom de la catégorie (legacy)")
+
     explanation: Optional[str] = Field(None, description="Explication de la réponse")
     points: int = Field(1, ge=1, description="Nombre de points")
 
@@ -25,13 +57,26 @@ class QuestionCreate(BaseModel):
             raise ValueError("Difficulté doit être: easy, medium, ou hard")
         return v
 
+    @field_validator('correct_answers')
+    @classmethod
+    def validate_correct_answers(cls, v, info):
+        # Vérifier que les index sont valides
+        if 'options' in info.data:
+            max_index = len(info.data['options']) - 1
+            for idx in v:
+                if idx < 0 or idx > max_index:
+                    raise ValueError(f"Index de réponse invalide: {idx}")
+        return v
+
 
 class QuestionUpdate(BaseModel):
     """Mise à jour d'une question"""
     question: Optional[str] = None
-    options: Optional[List[str]] = None
-    correct_answer: Optional[int] = Field(None, ge=0, le=3)
+    options: Optional[List[QuestionOption]] = Field(None, min_length=2, max_length=6)
+    correct_answers: Optional[List[int]] = None
+    is_multiple_answer: Optional[bool] = None
     difficulty: Optional[str] = None
+    category_id: Optional[str] = None
     category: Optional[str] = None
     explanation: Optional[str] = None
     points: Optional[int] = Field(None, ge=1)
@@ -42,10 +87,12 @@ class QuestionResponse(BaseModel):
     """Réponse question (AVEC la réponse correcte - Admin uniquement)"""
     id: str
     question: str
-    options: List[str]
-    correct_answer: int
+    options: List[Dict[str, Any]]  # Liste d'options {text, id}
+    correct_answers: List[int]  # Liste d'index
+    is_multiple_answer: bool
     difficulty: str
-    category: Optional[str]
+    category_id: Optional[str]
+    category: Optional[str] = None  # Nom de la catégorie (dénormalisé)
     explanation: Optional[str]
     points: int
     is_active: bool
@@ -59,8 +106,10 @@ class QuestionForCandidate(BaseModel):
     """Question pour candidat (SANS la réponse correcte)"""
     id: str
     question: str
-    options: List[str]
-    # correct_answer: OMIS intentionnellement
+    options: List[Dict[str, Any]]
+    is_multiple_answer: bool  # Important pour que le candidat sache
+    points: int
+    # correct_answers: OMIS intentionnellement
     # explanation: OMIS intentionnellement
 
     model_config = ConfigDict(from_attributes=True)

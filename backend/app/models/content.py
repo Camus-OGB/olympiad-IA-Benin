@@ -24,6 +24,7 @@ class News(Base, BaseModel):
     is_published = Column(Boolean, default=False, nullable=False)
     published_at = Column(String, nullable=True)  # ISO format datetime
     category = Column(String, nullable=True)  # Annonce, Actualité, etc.
+    external_url = Column(String, nullable=True)  # Lien vers l'article original (presse, blog externe, etc.)
 
     def __repr__(self):
         return f"<News {self.title}>"
@@ -246,11 +247,11 @@ class Testimonial(Base, BaseModel):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     past_edition_id = Column(String, ForeignKey("past_editions.id", ondelete="CASCADE"), nullable=False)
 
-    author_name = Column(String, nullable=False)
-    author_role = Column(String, nullable=True)  # "élève", "mentor", "parent"
-    content = Column(Text, nullable=False)
-    video_url = Column(String, nullable=True)
-    photo_url = Column(String, nullable=True)
+    student_name = Column(String, nullable=False)  # Nom de l'élève
+    school = Column(String, nullable=True)  # Établissement scolaire
+    role = Column(String, nullable=True)  # Distinction/rôle (ex: "Médaille d'Or", "Finaliste National")
+    quote = Column(Text, nullable=False)  # Témoignage/citation
+    image_url = Column(String, nullable=True)  # Photo du participant
 
     # Relation
     past_edition = relationship("PastEdition", back_populates="testimonials")

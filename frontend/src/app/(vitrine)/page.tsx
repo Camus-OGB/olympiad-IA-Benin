@@ -1,49 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Calendar, Trophy, Users, Brain, Quote, ChevronRight, ChevronLeft, MapPin, Sparkles, Zap, Award, Target } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, Calendar, Trophy, Users, Brain, MapPin, Sparkles, Zap, Target, ChevronRight, Quote, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
+import { contentApi, NextDeadline, NewsItem, Testimonial } from '@/lib/api/content';
 
-const newsData = [
-  {
-    id: 1,
-    title: "Lancement officiel des inscriptions pour l'AOAI 2026",
-    date: "15 Janvier 2026",
-    category: "Annonce",
-    excerpt: "Les élèves béninois peuvent désormais s'inscrire pour la phase de présélection nationale.",
-    image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?q=80&w=800&auto=format&fit=crop"
-  },
-  {
-    id: 2,
-    title: "Retour sur l'exploit de Beijing : Le Bénin à l'honneur",
-    date: "10 Septembre 2025",
-    category: "Résultats",
-    excerpt: "Analyse de la performance de nos 4 champions lors de la première participation historique.",
-    image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=800&auto=format&fit=crop"
-  },
-  {
-    id: 3,
-    title: "Partenariat renforcé avec Sèmè City pour 2026",
-    date: "05 Janvier 2026",
-    category: "Presse",
-    excerpt: "Sèmè City confirme son engagement pour la formation des talents en IA.",
-    image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=800&auto=format&fit=crop"
-  }
-];
-
-const testimonials = [
-  { name: "Merveille Agbossaga", role: "Lauréate 2025 — Mention Honorable", quote: "Cette expérience à Beijing a changé ma vision de l'IA. J'ai compris que nous pouvions créer des solutions pour l'Afrique.", image: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?q=80&w=400&auto=format&fit=crop" },
-  { name: "Dona Ahouansou", role: "Lauréat 2025", quote: "Le bootcamp à Sèmè City était intense mais incroyable. C'est là que tout s'est joué.", image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=400&auto=format&fit=crop" },
-  { name: "Déreck M'po Yeti", role: "Finaliste National", quote: "Le code est un langage universel. Beijing n'était que le début.", image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=400&auto=format&fit=crop" }
-];
-
-const partners = [
-  { name: "Sèmè City", logo: "https://semecity.bj/wp-content/uploads/2021/09/Logo-Seme-City.png" },
-  { name: "M.N.D.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" },
-  { name: "M.E.S.R.S.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" },
-  { name: "M.E.S.T.F.P.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" },
-  { name: "IOAI", logo: "https://ioai-official.org/wp-content/uploads/2024/03/cropped-IOAI_Logo_Horizontal_Color.png" }
-];
+// Pas de données par défaut - on utilise uniquement les vraies données de la base
 
 const heroSlides = [
   {
@@ -69,25 +31,117 @@ const heroSlides = [
 ];
 
 const Home: React.FC = () => {
-  const [candidateCount, setCandidateCount] = useState(124);
+  const [candidateCount, setCandidateCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const [nextDeadline, setNextDeadline] = useState<NextDeadline | null>(null);
+  const [deadlineLoading, setDeadlineLoading] = useState(true);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [testimonials, setTestimonials] = useState<GeneralTestimonial[]>([]);
+  const [testimonialsLoading, setTestimonialsLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [latestPastEditionId, setLatestPastEditionId] = useState<string | null>(null);
 
+  // Charger la dernière édition passée pour le lien dynamique
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCandidateCount(prev => prev + (Math.random() > 0.7 ? 1 : 0));
-    }, 3000);
+    contentApi.getPastEditions()
+      .then(data => {
+        if (data.length > 0) {
+          const latest = [...data].sort((a, b) => b.year - a.year)[0];
+          setLatestPastEditionId(latest.id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Charger les statistiques publiques (nombre de candidats)
+  useEffect(() => {
+    const fetchPublicStats = async () => {
+      try {
+        const stats = await contentApi.getPublicStats();
+        setCandidateCount(stats.totalCandidates);
+      } catch (error) {
+        console.error('Erreur lors du chargement des statistiques:', error);
+        // Garder la valeur par défaut 0
+      }
+    };
+
+    fetchPublicStats();
+
+    // Actualiser toutes les 30 secondes
+    const interval = setInterval(fetchPublicStats, 30000);
     return () => clearInterval(interval);
   }, []);
 
+  // Charger les actualités depuis l'API
   useEffect(() => {
-    const targetDate = new Date("2026-04-09T09:00:00").getTime();
+    const fetchNews = async () => {
+      try {
+        const newsData = await contentApi.getNews({
+          publishedOnly: true,
+          limit: 3
+        });
+        setNews(newsData);
+      } catch (error) {
+        console.error('Erreur lors du chargement des actualités:', error);
+        setNews([]);
+      } finally {
+        setNewsLoading(false);
+      }
+    };
+
+    fetchNews();
+  }, []);
+
+  // Charger les partenaires depuis l'API
+  // Charger les témoignages depuis l'API
+  useEffect(() => {
+    const fetchTestimonials = async () => {
+      try {
+        const testimonialsData = await contentApi.getAllTestimonials();
+        // Filtrer les témoignages avec contenu valide
+        setTestimonials(testimonialsData.filter(t => t.content?.trim() && t.authorName?.trim()));
+      } catch (error) {
+        console.error('Erreur lors du chargement des témoignages:', error);
+        setTestimonials([]);
+      } finally {
+        setTestimonialsLoading(false);
+      }
+    };
+
+    fetchTestimonials();
+  }, []);
+
+  // Charger la prochaine deadline depuis l'API
+  useEffect(() => {
+    const fetchNextDeadline = async () => {
+      try {
+        const deadline = await contentApi.getNextDeadline();
+        setNextDeadline(deadline);
+      } catch (error) {
+        console.error('Erreur lors du chargement de la prochaine deadline:', error);
+      } finally {
+        setDeadlineLoading(false);
+      }
+    };
+
+    fetchNextDeadline();
+  }, []);
+
+  // Compte à rebours dynamique basé sur nextDeadline
+  useEffect(() => {
+    if (!nextDeadline?.targetDate) {
+      return;
+    }
+
+    const targetDate = new Date(nextDeadline.targetDate).getTime();
     const timer = setInterval(() => {
       const now = new Date().getTime();
       const distance = targetDate - now;
       if (distance < 0) {
         clearInterval(timer);
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
       } else {
         setTimeLeft({
           days: Math.floor(distance / (1000 * 60 * 60 * 24)),
@@ -98,15 +152,18 @@ const Home: React.FC = () => {
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [nextDeadline]);
 
+  // Auto-scroll des témoignages
   useEffect(() => {
+    if (testimonials.length === 0) return;
+
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % testimonials.length);
     }, 8000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [testimonials]);
 
   // Hero slideshow
   useEffect(() => {
@@ -215,39 +272,84 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* ==================== COUNTDOWN ==================== */}
-      <section className="py-12 bg-ioai-blue">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
-            <div className="text-center lg:text-left">
-              <p className="text-white/70 text-sm mb-1">Clôture des inscriptions</p>
-              <h3 className="text-xl sm:text-2xl font-display font-black text-white">
-                Avant la finale AOAI
-              </h3>
-              <p className="text-white/70 text-sm mt-1">Sousse, Tunisie • 9-12 Avril 2026</p>
-            </div>
-
-            <div className="flex justify-center gap-3">
-              {[
-                { val: timeLeft.days, label: 'Jours' },
-                { val: timeLeft.hours, label: 'Heures' },
-                { val: timeLeft.minutes, label: 'Min' },
-                { val: timeLeft.seconds, label: 'Sec' }
-              ].map((t, i) => (
-                <div key={i} className="bg-white/10 rounded-lg p-4 min-w-[70px] text-center">
-                  <span className="block font-bold text-3xl text-white">{String(t.val).padStart(2, '0')}</span>
-                  <span className="text-xs text-white/70 mt-1 block">{t.label}</span>
+      {/* ==================== COUNTDOWN DYNAMIQUE ==================== */}
+      {!deadlineLoading && nextDeadline && (
+        <section className="py-12 bg-ioai-blue">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+              <div className="text-center lg:text-left">
+                {/* Badge de statut */}
+                <div className="inline-flex items-center gap-2 mb-3">
+                  {nextDeadline.targetType === 'start' && (
+                    <span className="px-3 py-1 bg-blue-500/20 text-blue-200 text-xs font-bold rounded-full border border-blue-400/30">
+                      ⏳ À venir
+                    </span>
+                  )}
+                  {nextDeadline.targetType === 'end' && (
+                    <span className="px-3 py-1 bg-red-500/20 text-red-200 text-xs font-bold rounded-full border border-red-400/30">
+                      🔥 En cours
+                    </span>
+                  )}
                 </div>
-              ))}
-            </div>
 
-            <Link href="/auth/inscription" className="inline-flex items-center px-6 py-3 bg-white text-ioai-blue font-bold rounded-lg hover:bg-gray-100 transition-colors">
-              S&apos;inscrire
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Link>
+                {/* Titre dynamique */}
+                <h3 className="text-xl sm:text-2xl font-display font-black text-white">
+                  {nextDeadline.targetType === 'start'
+                    ? `${nextDeadline.phaseTitle.toUpperCase()} DANS`
+                    : `CLÔTURE ${nextDeadline.phaseTitle.toUpperCase()} DANS`
+                  }
+                </h3>
+
+                {/* Description */}
+                {nextDeadline.phaseDescription && (
+                  <p className="text-white/70 text-sm mt-2">{nextDeadline.phaseDescription}</p>
+                )}
+
+                {/* Phase en cours (si différente) */}
+                {nextDeadline.currentPhase && (
+                  <p className="text-white/60 text-xs mt-2">
+                    🔴 En cours : {nextDeadline.currentPhase.title}
+                  </p>
+                )}
+              </div>
+
+              {/* Compte à rebours */}
+              <div className="flex justify-center gap-3">
+                {[
+                  { val: timeLeft.days, label: 'Jours' },
+                  { val: timeLeft.hours, label: 'Heures' },
+                  { val: timeLeft.minutes, label: 'Min' },
+                  { val: timeLeft.seconds, label: 'Sec' }
+                ].map((t, i) => (
+                  <div key={i} className="bg-white/10 rounded-lg p-4 min-w-[70px] text-center">
+                    <span className="block font-bold text-3xl text-white">{String(t.val).padStart(2, '0')}</span>
+                    <span className="text-xs text-white/70 mt-1 block">{t.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* CTA adapté selon la phase */}
+              {nextDeadline.phaseTitle.toLowerCase().includes('inscription') && nextDeadline.targetType === 'end' && (
+                <Link href="/auth/inscription" className="inline-flex items-center px-6 py-3 bg-white text-ioai-blue font-bold rounded-lg hover:bg-gray-100 transition-colors">
+                  S&apos;inscrire maintenant
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* Message si aucune deadline */}
+      {!deadlineLoading && !nextDeadline && (
+        <section className="py-12 bg-ioai-blue">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p className="text-white/80 text-lg">
+              📅 Restez connectés pour la prochaine édition !
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* ==================== PARCOURS 2026 - TIMELINE ==================== */}
       <section className="py-20 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
@@ -499,30 +601,54 @@ const Home: React.FC = () => {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-            {newsData.map((news, index) => (
-              <article key={news.id} className={`group relative bg-white rounded-2xl overflow-hidden shadow-lg shadow-gray-100/50 hover:shadow-2xl border border-gray-100 hover:border-ioai-green/20 transition-all duration-300 ${index === 0 ? 'md:col-span-2 md:row-span-2' : ''}`}>
-                <div className={`relative overflow-hidden ${index === 0 ? 'h-64 md:h-full' : 'h-48'}`}>
-                  <img src={news.image} alt={news.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
-                  <span className="absolute top-4 left-4 bg-gradient-to-r from-ioai-green to-teal-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide shadow-lg">
-                    {news.category}
-                  </span>
-                  <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-                    <div className="flex items-center text-xs text-white/80 font-medium mb-2">
-                      <Calendar className="w-3.5 h-3.5 mr-1.5" /> {news.date}
+          {newsLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ioai-green mx-auto mb-4"></div>
+              <p className="text-gray-600">Chargement des actualités...</p>
+            </div>
+          ) : news.length === 0 ? (
+            <div className="text-center py-12">
+              <Calendar className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-600 text-lg font-medium">Aucune actualité pour le moment</p>
+              <p className="text-gray-500 text-sm mt-2">Revenez bientôt pour découvrir nos dernières nouvelles !</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+              {news.map((newsItem, index) => {
+                // Formater la date pour l'affichage
+                const displayDate = newsItem.publishedAt
+                  ? new Date(newsItem.publishedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+                  : new Date(newsItem.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                return (
+                  <article key={newsItem.id} className={`group relative bg-white rounded-2xl overflow-hidden shadow-lg shadow-gray-100/50 hover:shadow-2xl border border-gray-100 hover:border-ioai-green/20 transition-all duration-300 ${index === 0 ? 'md:col-span-2 md:row-span-2' : ''}`}>
+                    <div className={`relative overflow-hidden ${index === 0 ? 'h-64 md:h-full' : 'h-48'}`}>
+                      <img
+                        src={newsItem.imageUrl || 'https://images.unsplash.com/photo-1531482615713-2afd69097998?q=80&w=800&auto=format&fit=crop'}
+                        alt={newsItem.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+                      <span className="absolute top-4 left-4 bg-gradient-to-r from-ioai-green to-teal-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide shadow-lg">
+                        {newsItem.category || 'Actualité'}
+                      </span>
+                      <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
+                        <div className="flex items-center text-xs text-white/80 font-medium mb-2">
+                          <Calendar className="w-3.5 h-3.5 mr-1.5" /> {displayDate}
+                        </div>
+                        <h3 className={`font-bold text-white mb-2 leading-snug group-hover:text-ioai-green transition-colors ${index === 0 ? 'text-xl md:text-2xl' : 'text-base'}`}>
+                          {newsItem.title}
+                        </h3>
+                        {index === 0 && newsItem.excerpt && (
+                          <p className="text-sm text-white/80 line-clamp-2 hidden md:block">{newsItem.excerpt}</p>
+                        )}
+                      </div>
                     </div>
-                    <h3 className={`font-bold text-white mb-2 leading-snug group-hover:text-ioai-green transition-colors ${index === 0 ? 'text-xl md:text-2xl' : 'text-base'}`}>
-                      {news.title}
-                    </h3>
-                    {index === 0 && (
-                      <p className="text-sm text-white/80 line-clamp-2 hidden md:block">{news.excerpt}</p>
-                    )}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -546,91 +672,107 @@ const Home: React.FC = () => {
           </div>
 
           {/* Slider principal */}
-          <div className="card relative overflow-hidden bg-white/80 backdrop-blur-sm">
-            <div className="absolute -top-10 -left-10 w-32 h-32 bg-ioai-green/5 rounded-full blur-2xl" />
-            <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-ioai-blue/5 rounded-full blur-2xl" />
+          {testimonialsLoading ? (
+            <div className="card relative overflow-hidden bg-white/80 backdrop-blur-sm">
+              <div className="px-6 sm:px-10 py-10 sm:py-12 relative z-10 text-center">
+                <p className="text-gray-500">Chargement des témoignages...</p>
+              </div>
+            </div>
+          ) : testimonials.length === 0 ? (
+            <div className="card relative overflow-hidden bg-white/80 backdrop-blur-sm">
+              <div className="px-6 sm:px-10 py-10 sm:py-12 relative z-10 text-center">
+                <p className="text-gray-500">Aucun témoignage disponible pour le moment.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="card relative overflow-hidden bg-white/80 backdrop-blur-sm">
+              <div className="absolute -top-10 -left-10 w-32 h-32 bg-ioai-green/5 rounded-full blur-2xl" />
+              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-ioai-blue/5 rounded-full blur-2xl" />
 
-            <div className="px-6 sm:px-10 py-10 sm:py-12 relative z-10">
-              <Quote className="w-10 h-10 text-ioai-green/15 mb-6" />
+              <div className="px-6 sm:px-10 py-10 sm:py-12 relative z-10">
+                <Quote className="w-10 h-10 text-ioai-green/15 mb-6" />
 
-              <p className="text-lg sm:text-xl text-gray-700 leading-relaxed mb-8 italic">
-                &ldquo;{testimonials[currentIndex].quote}&rdquo;
-              </p>
+                <p className="text-lg sm:text-xl text-gray-700 leading-relaxed mb-8 italic">
+                  &ldquo;{testimonials[currentIndex].content}&rdquo;
+                </p>
 
-              <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between gap-6">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-4 border-ioai-green/40 shadow-md">
-                      <img
-                        src={testimonials[currentIndex].image}
-                        alt={testimonials[currentIndex].name}
-                        className="w-full h-full object-cover"
-                      />
+                <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-4 border-ioai-green/40 shadow-md">
+                        <img
+                          src={testimonials[currentIndex].photoUrl || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=256&h=256&auto=format&fit=crop'}
+                          alt={testimonials[currentIndex].authorName}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-ioai-green flex items-center justify-center shadow-md">
+                        <Brain className="w-4 h-4 text-white" />
+                      </div>
                     </div>
-                    <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-ioai-green flex items-center justify-center shadow-md">
-                      <Brain className="w-4 h-4 text-white" />
+                    <div>
+                      <h4 className="font-bold text-ioai-blue text-lg">
+                        {testimonials[currentIndex].authorName}
+                      </h4>
+                      <p className="text-sm text-ioai-green font-semibold">
+                        {testimonials[currentIndex].authorRole || 'Participant'}
+                      </p>
+                      {testimonials[currentIndex].organization && (
+                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3" />
+                          {testimonials[currentIndex].organization}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-ioai-blue text-lg">
-                      {testimonials[currentIndex].name}
-                    </h4>
-                    <p className="text-sm text-ioai-green font-semibold">
-                      {testimonials[currentIndex].role}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
-                      <MapPin className="w-3 h-3" />
-                      Beijing 2025 • Équipe Bénin
-                    </p>
-                  </div>
-                </div>
 
-                {/* Contrôles slider */}
-                <div className="flex flex-col items-center gap-3 sm:items-end">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      aria-label="Témoignage précédent"
-                      onClick={() =>
-                        setCurrentIndex((prev) =>
-                          prev === 0 ? testimonials.length - 1 : prev - 1
-                        )
-                      }
-                      className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-ioai-blue hover:bg-ioai-blue hover:text-white transition-colors"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Témoignage suivant"
-                      onClick={() =>
-                        setCurrentIndex((prev) => (prev + 1) % testimonials.length)
-                      }
-                      className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-ioai-blue hover:bg-ioai-blue hover:text-white transition-colors"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {testimonials.map((t, index) => (
+                  {/* Contrôles slider */}
+                  <div className="flex flex-col items-center gap-3 sm:items-end">
+                    <div className="flex items-center gap-3">
                       <button
-                        key={t.name}
                         type="button"
-                        onClick={() => setCurrentIndex(index)}
-                        className={`h-2.5 rounded-full transition-all ${
-                          index === currentIndex
-                            ? 'w-7 bg-ioai-blue'
-                            : 'w-2.5 bg-gray-300 hover:bg-gray-400'
-                        }`}
-                        aria-label={`Afficher le témoignage de ${t.name}`}
-                      />
-                    ))}
+                        aria-label="Témoignage précédent"
+                        onClick={() =>
+                          setCurrentIndex((prev) =>
+                            prev === 0 ? testimonials.length - 1 : prev - 1
+                          )
+                        }
+                        className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-ioai-blue hover:bg-ioai-blue hover:text-white transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Témoignage suivant"
+                        onClick={() =>
+                          setCurrentIndex((prev) => (prev + 1) % testimonials.length)
+                        }
+                        className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-ioai-blue hover:bg-ioai-blue hover:text-white transition-colors"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {testimonials.map((t, index) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setCurrentIndex(index)}
+                          className={`h-2.5 rounded-full transition-all ${
+                            index === currentIndex
+                              ? 'w-7 bg-ioai-blue'
+                              : 'w-2.5 bg-gray-300 hover:bg-gray-400'
+                          }`}
+                          aria-label={`Afficher le témoignage de ${t.authorName}`}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Photo de groupe des lauréats */}
           <div className="card overflow-hidden hover:shadow-2xl transition-all duration-500 group mt-10">
@@ -652,7 +794,7 @@ const Home: React.FC = () => {
                     </p>
                   </div>
                   <Link
-                    href="/bilan/edition-2025"
+                    href={latestPastEditionId ? `/bilan/${latestPastEditionId}` : '/bilan'}
                     className="inline-flex items-center px-6 py-3 bg-white text-ioai-blue font-bold rounded-xl hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 group/btn"
                   >
                     Découvrir l&apos;équipe
@@ -661,34 +803,6 @@ const Home: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ==================== PARTENAIRES ==================== */}
-      <section className="py-16 bg-white border-t border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-text-tertiary font-bold text-xs uppercase tracking-wider mb-3">
-              <Award className="w-3.5 h-3.5" />
-              Partenaires
-            </div>
-            <h3 className="text-xl font-display font-bold text-ioai-blue">Nos partenaires institutionnels</h3>
-          </div>
-
-          <div className="flex flex-wrap justify-center items-center gap-8 lg:gap-16">
-            {partners.map((p, i) => (
-              <div key={i} className="group relative p-4 rounded-xl hover:bg-gray-50 transition-all cursor-pointer">
-                <img 
-                  src={p.logo} 
-                  alt={p.name} 
-                  className="h-12 lg:h-14 w-auto object-contain grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300" 
-                />
-                <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-hover:bottom-0 text-xs font-medium text-text-tertiary transition-all whitespace-nowrap">
-                  {p.name}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
       </section>

@@ -16,7 +16,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      isLoading: false,
+      isLoading: true,  // Commencer avec true pour indiquer qu'on charge
       hasHydrated: false,
       setUser: (user) => set({ user }),
       clearUser: () => set({ user: null }),

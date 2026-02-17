@@ -158,6 +158,16 @@ Pour toute question, contactez l'équipe technique.
 )
 
 
+# Configuration CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.middleware("http")
 async def access_log_middleware(request: Request, call_next):
     if not settings.ACCESS_LOG_ENABLED:
@@ -243,15 +253,6 @@ async def security_headers_middleware(request: Request, call_next):
 
     return response
 
-# Configuration CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 # Handler d'erreurs global
 @app.exception_handler(Exception)
@@ -288,7 +289,7 @@ async def health_check():
 
 
 # Import des routers
-from app.api.v1.endpoints import auth, candidates, admin, content, qcm, users, resources, upload
+from app.api.v1.endpoints import auth, candidates, admin, content, qcm, users, resources, upload, qcm_categories
 
 # Inclusion des routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentification"])
@@ -297,6 +298,7 @@ app.include_router(candidates.router, prefix="/api/v1/candidates", tags=["Candid
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Administration"])
 app.include_router(content.router, prefix="/api/v1/content", tags=["Contenu"])
 app.include_router(qcm.router, prefix="/api/v1/qcm", tags=["QCM"])
+app.include_router(qcm_categories.router, prefix="/api/v1/qcm-categories", tags=["Catégories QCM"])
 app.include_router(resources.router, prefix="/api/v1/resources", tags=["Ressources"])
 app.include_router(upload.router, prefix="/api/v1", tags=["Upload"])
 

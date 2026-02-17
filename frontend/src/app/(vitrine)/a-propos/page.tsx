@@ -1,19 +1,32 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Globe, Lightbulb, ShieldCheck, Heart, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-
-const allPartners = [
-   { name: 'Sèmè City', role: 'Organisateur Principal', desc: "Cité internationale de l'innovation.", logo: "https://semecity.bj/wp-content/uploads/2021/09/Logo-Seme-City.png" },
-   { name: 'Ministère du Numérique', role: 'Institutionnel', desc: "Stratégie numérique nationale.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" },
-   { name: 'Ministère Ens. Supérieur', role: 'Académique', desc: "Recherche et Innovation.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" },
-   { name: 'Ministère Ens. Secondaire', role: 'Éducatif', desc: "Mobilisation des lycées.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" },
-   { name: 'IOAI', role: 'International', desc: "International Olympiad in AI.", logo: "https://ioai-official.org/wp-content/uploads/2024/03/cropped-IOAI_Logo_Horizontal_Color.png" },
-   { name: 'MND', role: 'Sponsor Gold', desc: "Soutien logistique.", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Coat_of_arms_of_Benin.svg/150px-Coat_of_arms_of_Benin.svg.png" }
-];
+import { contentApi, Partner } from '@/lib/api/content';
 
 const About: React.FC = () => {
+   const [partners, setPartners] = useState<Partner[]>([]);
+   const [partnersLoading, setPartnersLoading] = useState(true);
+
+   // Charger les partenaires depuis l'API
+   useEffect(() => {
+      const fetchPartners = async () => {
+         try {
+            const partnersData = await contentApi.getPartners({
+               activeOnly: true
+            });
+            setPartners(partnersData);
+         } catch (error) {
+            console.error('Erreur lors du chargement des partenaires:', error);
+            setPartners([]);
+         } finally {
+            setPartnersLoading(false);
+         }
+      };
+
+      fetchPartners();
+   }, []);
    return (
       <div className="bg-[#f8f9fc] min-h-screen">
          {/* Hero — Image background */}
@@ -105,26 +118,52 @@ const About: React.FC = () => {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {allPartners.map((p, i) => (
-                     <div key={i} className="group card p-8 flex flex-col items-center text-center hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden bg-white border border-gray-100">
-                        {/* Background Decoration */}
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-full -mr-12 -mt-12 group-hover:bg-ioai-green/5 transition-colors"></div>
+               {partnersLoading ? (
+                  <div className="text-center py-16">
+                     <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-ioai-green mx-auto mb-4"></div>
+                     <p className="text-gray-500">Chargement des partenaires...</p>
+                  </div>
+               ) : partners.length === 0 ? (
+                  <div className="text-center py-16">
+                     <p className="text-gray-400">Aucun partenaire disponible pour le moment.</p>
+                  </div>
+               ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                     {partners.map((p) => (
+                        <div key={p.id} className="group card p-8 flex flex-col items-center text-center hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden bg-white border border-gray-100">
+                           {/* Background Decoration */}
+                           <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-full -mr-12 -mt-12 group-hover:bg-ioai-green/5 transition-colors"></div>
 
-                        {/* Logo Container */}
-                        <div className="h-20 w-full flex items-center justify-center mb-6 relative z-10">
-                           <img src={p.logo} alt={p.name} className="max-h-full max-w-[180px] object-contain filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300" />
-                        </div>
+                           {/* Logo Container */}
+                           <div className="h-20 w-full flex items-center justify-center mb-6 relative z-10">
+                              <img
+                                 src={p.logoUrl || 'https://via.placeholder.com/180x80?text=Logo'}
+                                 alt={p.name}
+                                 className="max-h-full max-w-[180px] object-contain filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300"
+                              />
+                           </div>
 
-                        {/* Content */}
-                        <div className="relative z-10 w-full border-t border-gray-50 pt-6">
-                           <h4 className="font-bold text-lg text-gray-900 mb-1">{p.name}</h4>
-                           <span className="inline-block text-xs font-bold text-ioai-green uppercase tracking-wider mb-2">{p.role}</span>
-                           <p className="text-sm text-gray-400 leading-relaxed">{p.desc}</p>
+                           {/* Content */}
+                           <div className="relative z-10 w-full border-t border-gray-50 pt-6">
+                              <h4 className="font-bold text-lg text-gray-900 mb-1">{p.name}</h4>
+                              {p.description && (
+                                 <p className="text-sm text-gray-400 leading-relaxed mt-2">{p.description}</p>
+                              )}
+                              {p.websiteUrl && (
+                                 <a
+                                    href={p.websiteUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block mt-3 text-xs font-semibold text-ioai-green hover:underline"
+                                 >
+                                    Visiter le site →
+                                 </a>
+                              )}
+                           </div>
                         </div>
-                     </div>
-                  ))}
-               </div>
+                     ))}
+                  </div>
+               )}
 
                {/* CTA */}
                <div className="mt-20 text-center">

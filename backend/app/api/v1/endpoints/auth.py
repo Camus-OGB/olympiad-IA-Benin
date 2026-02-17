@@ -244,22 +244,28 @@ async def login(
     access_token = create_access_token({"sub": user.id})
     refresh_token = create_refresh_token({"sub": user.id})
 
-    # Définir les cookies HttpOnly pour cross-domain (Vercel <-> Render)
+    # Définir les cookies - Configuration adaptée à l'environnement
+    # En développement (localhost): secure=False, samesite="lax", httponly=False pour faciliter le debug
+    # En production (HTTPS): secure=True, samesite="none", httponly=True pour la sécurité
+    is_production = settings.ENVIRONMENT == "production"
+
     response.set_cookie(
         key="access_token",
         value=access_token,
-        httponly=True,
-        secure=True,  # Obligatoire pour SameSite=None
-        samesite="none",  # Permet les cookies cross-domain
+        httponly=is_production,  # HttpOnly seulement en production pour la sécurité
+        secure=is_production,  # True seulement en production HTTPS
+        samesite="none" if is_production else "lax",  # Cross-domain en prod, lax en dev
+        path="/",  # Cookie valide sur toutes les routes
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,
-        secure=True,  # Obligatoire pour SameSite=None
-        samesite="none",  # Permet les cookies cross-domain
+        httponly=is_production,  # HttpOnly seulement en production pour la sécurité
+        secure=is_production,  # True seulement en production HTTPS
+        samesite="none" if is_production else "lax",  # Cross-domain en prod, lax en dev
+        path="/",  # Cookie valide sur toutes les routes
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
 

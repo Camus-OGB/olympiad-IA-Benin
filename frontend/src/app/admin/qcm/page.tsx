@@ -291,12 +291,12 @@ export default function QcmManager() {
                           <div
                             key={idx}
                             className={`px-3 py-2 rounded-lg ${
-                              idx === question.correctAnswer
+                              question.correctAnswers?.includes(idx)
                                 ? 'bg-green-50 text-green-700 font-medium'
                                 : 'bg-gray-50 text-gray-600'
                             }`}
                           >
-                            {String.fromCharCode(65 + idx)}. {opt}
+                            {String.fromCharCode(65 + idx)}. {typeof opt === 'object' ? opt.text : opt}
                           </div>
                         ))}
                       </div>

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Save, X, Upload, Quote, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Save, X, Upload, Quote, Loader2, Video, Building } from 'lucide-react';
+import { contentApi, GeneralTestimonial } from '@/lib/api/content';
 
 async function uploadImage(file: File, folder: string): Promise<string | null> {
   const formData = new FormData();
@@ -18,73 +19,73 @@ async function uploadImage(file: File, folder: string): Promise<string | null> {
   return data.url as string;
 }
 
-interface Testimonial {
-  id: string;
-  name: string;
-  edition: string;
-  role: string;
-  quote: string;
-  imageUrl: string;
-  rating: number;
-  featured: boolean;
-}
-
 export default function TestimonialsManager() {
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([
-    {
-      id: '1',
-      name: 'Sarah Akoété',
-      edition: '2024',
-      role: 'Lauréate 2024',
-      quote: 'Participer aux Olympiades a changé ma vie. Je suis maintenant étudiante à l\'EPITA Paris grâce à cette opportunité unique.',
-      imageUrl: '/images/portrait1.jpg',
-      rating: 5,
-      featured: true
-    },
-    {
-      id: '2',
-      name: 'Koffi Mensah',
-      edition: '2023',
-      role: 'Finaliste 2023',
-      quote: 'Une expérience incroyable qui m\'a permis de découvrir ma passion pour l\'IA et de rencontrer des mentors exceptionnels.',
-      imageUrl: '/images/portrait2.jpg',
-      rating: 5,
-      featured: false
-    }
-  ]);
-
+  const [testimonials, setTestimonials] = useState<GeneralTestimonial[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingTestimonial, setEditingTestimonial] = useState<Testimonial | null>(null);
-  const [formData, setFormData] = useState<Partial<Testimonial>>({
-    name: '',
-    edition: '',
-    role: '',
-    quote: '',
-    imageUrl: '',
-    rating: 5,
-    featured: false
+  const [editingTestimonial, setEditingTestimonial] = useState<GeneralTestimonial | null>(null);
+  const [formData, setFormData] = useState({
+    authorName: '',
+    authorRole: '',
+    authorType: 'mentor' as string,
+    content: '',
+    photoUrl: '',
+    videoUrl: '',
+    organization: '',
+    displayOrder: 0,
+    isPublished: true
   });
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadTestimonials();
+  }, []);
+
+  const loadTestimonials = async () => {
+    try {
+      setLoading(true);
+      const data = await contentApi.getGeneralTestimonials(false); // Charger tous (publiés et non publiés)
+      setTestimonials(data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des témoignages:', error);
+      setTestimonials([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAdd = () => {
     setIsEditing(true);
     setEditingTestimonial(null);
     setFormData({
-      name: '',
-      edition: '',
-      role: '',
-      quote: '',
-      imageUrl: '',
-      rating: 5,
-      featured: false
+      authorName: '',
+      authorRole: '',
+      authorType: 'mentor',
+      content: '',
+      photoUrl: '',
+      videoUrl: '',
+      organization: '',
+      displayOrder: testimonials.length,
+      isPublished: true
     });
   };
 
-  const handleEdit = (testimonial: Testimonial) => {
+  const handleEdit = (testimonial: GeneralTestimonial) => {
     setIsEditing(true);
     setEditingTestimonial(testimonial);
-    setFormData(testimonial);
+    setFormData({
+      authorName: testimonial.authorName,
+      authorRole: testimonial.authorRole || '',
+      authorType: testimonial.authorType || 'mentor',
+      content: testimonial.content,
+      photoUrl: testimonial.photoUrl || '',
+      videoUrl: testimonial.videoUrl || '',
+      organization: testimonial.organization || '',
+      displayOrder: testimonial.displayOrder || 0,
+      isPublished: testimonial.isPublished
+    });
   };
 
   const handleImageFileChange = async (
@@ -102,7 +103,7 @@ export default function TestimonialsManager() {
         setUploadError("Impossible d'uploader l'image. Réessayez.");
         return;
       }
-      setFormData((prev) => ({ ...prev, imageUrl: url }));
+      setFormData((prev) => ({ ...prev, photoUrl: url }));
     } catch (error) {
       console.error(error);
       setUploadError("Erreur lors de l'upload de l'image.");
@@ -111,28 +112,52 @@ export default function TestimonialsManager() {
     }
   };
 
-  const handleSave = () => {
-    if (editingTestimonial) {
-      setTestimonials(testimonials.map(t => t.id === editingTestimonial.id ? { ...formData, id: t.id } as Testimonial : t));
-    } else {
-      const newTestimonial: Testimonial = {
-        ...formData,
-        id: Date.now().toString()
-      } as Testimonial;
-      setTestimonials([...testimonials, newTestimonial]);
+  const handleSave = async () => {
+    if (!formData.authorName.trim() || !formData.content.trim()) {
+      alert('Le nom et le témoignage sont obligatoires');
+      return;
     }
-    setIsEditing(false);
-    setEditingTestimonial(null);
+
+    setSaving(true);
+    try {
+      if (editingTestimonial) {
+        await contentApi.updateGeneralTestimonial(editingTestimonial.id, formData);
+      } else {
+        await contentApi.createGeneralTestimonial(formData);
+      }
+      await loadTestimonials();
+      setIsEditing(false);
+      setEditingTestimonial(null);
+    } catch (error: any) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      alert(error?.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce témoignage ?')) {
-      setTestimonials(testimonials.filter(t => t.id !== id));
+      try {
+        await contentApi.deleteGeneralTestimonial(id);
+        await loadTestimonials();
+      } catch (error: any) {
+        console.error('Erreur lors de la suppression:', error);
+        alert(error?.response?.data?.detail || 'Erreur lors de la suppression');
+      }
     }
   };
 
-  const toggleFeatured = (id: string) => {
-    setTestimonials(testimonials.map(t => t.id === id ? { ...t, featured: !t.featured } : t));
+  const togglePublished = async (testimonial: GeneralTestimonial) => {
+    try {
+      await contentApi.updateGeneralTestimonial(testimonial.id, {
+        isPublished: !testimonial.isPublished
+      });
+      await loadTestimonials();
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour:', error);
+      alert('Erreur lors de la mise à jour du statut de publication');
+    }
   };
 
   const handleCancel = () => {
@@ -140,12 +165,23 @@ export default function TestimonialsManager() {
     setEditingTestimonial(null);
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-ioai-blue mx-auto mb-4" />
+          <p className="text-gray-600">Chargement des témoignages...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-black text-gray-900">Gestion des Témoignages</h1>
-          <p className="text-gray-500 mt-2">Gérez les témoignages des anciens participants</p>
+          <h1 className="text-3xl font-display font-black text-gray-900">Témoignages Généraux</h1>
+          <p className="text-gray-500 mt-2">Gérez les témoignages de mentors, parents, sponsors et partenaires</p>
         </div>
         <button
           onClick={handleAdd}
@@ -154,6 +190,27 @@ export default function TestimonialsManager() {
           <Plus size={20} />
           Nouveau Témoignage
         </button>
+      </div>
+
+      {/* Statistiques rapides */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-2xl text-white shadow-lg">
+          <Quote size={32} className="mb-3 opacity-80" />
+          <p className="text-3xl font-bold">{testimonials.length}</p>
+          <p className="text-sm opacity-90">Total</p>
+        </div>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-2xl text-white shadow-lg">
+          <p className="text-3xl font-bold">{testimonials.filter(t => t.isPublished).length}</p>
+          <p className="text-sm opacity-90">Publiés</p>
+        </div>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-2xl text-white shadow-lg">
+          <p className="text-3xl font-bold">{testimonials.filter(t => t.videoUrl).length}</p>
+          <p className="text-sm opacity-90">Avec vidéo</p>
+        </div>
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-2xl text-white shadow-lg">
+          <p className="text-3xl font-bold">{new Set(testimonials.map(t => t.authorType)).size}</p>
+          <p className="text-sm opacity-90">Types</p>
+        </div>
       </div>
 
       {/* Formulaire */}
@@ -169,31 +226,49 @@ export default function TestimonialsManager() {
                 <label className="block text-sm font-bold text-gray-700 mb-2">Nom complet *</label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Sarah Akoété"
+                  value={formData.authorName}
+                  onChange={(e) => setFormData({ ...formData, authorName: e.target.value })}
+                  placeholder="Marie Dupont"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Édition *</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Type *</label>
+                <select
+                  value={formData.authorType}
+                  onChange={(e) => setFormData({ ...formData, authorType: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
+                >
+                  <option value="mentor">Mentor</option>
+                  <option value="parent">Parent</option>
+                  <option value="sponsor">Sponsor</option>
+                  <option value="partner">Partenaire</option>
+                  <option value="alumni">Ancien participant</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Rôle / Titre</label>
                 <input
                   type="text"
-                  value={formData.edition}
-                  onChange={(e) => setFormData({ ...formData, edition: e.target.value })}
-                  placeholder="2024"
+                  value={formData.authorRole}
+                  onChange={(e) => setFormData({ ...formData, authorRole: e.target.value })}
+                  placeholder="Mentor Senior"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
               </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Rôle / Titre *</label>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  <Building className="inline w-4 h-4 mr-1" />
+                  Organisation
+                </label>
                 <input
                   type="text"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  placeholder="Lauréate 2024"
+                  value={formData.organization}
+                  onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
+                  placeholder="Google Bénin"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
                 />
               </div>
@@ -205,74 +280,83 @@ export default function TestimonialsManager() {
                 Témoignage *
               </label>
               <textarea
-                value={formData.quote}
-                onChange={(e) => setFormData({ ...formData, quote: e.target.value })}
+                value={formData.content}
+                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 placeholder="Votre témoignage inspirant..."
                 rows={5}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
               />
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  <Upload className="inline w-4 h-4 mr-1" />
-                  Photo du participant (upload)
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileChange}
-                  className="block w-full text-sm text-gray-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-ioai-green/10 file:text-ioai-green hover:file:bg-ioai-green/20"
-                />
-                {isUploadingImage && (
-                  <p className="text-xs text-blue-600 mt-1">Upload en cours...</p>
-                )}
-                {uploadError && (
-                  <p className="text-xs text-red-600 mt-1">{uploadError}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    <Upload className="inline w-4 h-4 mr-1" />
+                    Photo du participant (upload)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    className="block w-full text-sm text-gray-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-ioai-green/10 file:text-ioai-green hover:file:bg-ioai-green/20"
+                  />
+                  {isUploadingImage && (
+                    <p className="text-xs text-blue-600 mt-1">Upload en cours...</p>
+                  )}
+                  {uploadError && (
+                    <p className="text-xs text-red-600 mt-1">{uploadError}</p>
+                  )}
+                </div>
+
+                {formData.photoUrl && (
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-600 mb-2">Aperçu :</p>
+                    <img
+                      src={formData.photoUrl}
+                      alt="Preview"
+                      className="w-32 h-32 object-cover rounded-xl border-2 border-gray-200"
+                    />
+                  </div>
                 )}
               </div>
 
-              {formData.imageUrl && (
-                <div className="mt-2">
-                  <p className="text-sm text-gray-600 mb-2">Aperçu :</p>
-                  <img
-                    src={formData.imageUrl}
-                    alt="Preview"
-                    className="w-32 h-32 object-cover rounded-xl border-2 border-gray-200"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  <Video className="inline w-4 h-4 mr-1" />
+                  URL Vidéo (YouTube, Vimeo, etc.)
+                </label>
+                <input
+                  type="url"
+                  value={formData.videoUrl}
+                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  <Star className="inline w-4 h-4 mr-1" />
-                  Note (1-5)
-                </label>
-                <select
-                  value={formData.rating}
-                  onChange={(e) => setFormData({ ...formData, rating: Number(e.target.value) })}
+                <label className="block text-sm font-bold text-gray-700 mb-2">Ordre d'affichage</label>
+                <input
+                  type="number"
+                  value={formData.displayOrder}
+                  onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
+                  min="0"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-ioai-green focus:border-transparent"
-                >
-                  <option value={5}>5 étoiles</option>
-                  <option value={4}>4 étoiles</option>
-                  <option value={3}>3 étoiles</option>
-                  <option value={2}>2 étoiles</option>
-                  <option value={1}>1 étoile</option>
-                </select>
+                />
               </div>
 
               <div className="flex items-end">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={formData.featured}
-                    onChange={(e) => setFormData({ ...formData, featured: e.target.checked })}
+                    checked={formData.isPublished}
+                    onChange={(e) => setFormData({ ...formData, isPublished: e.target.checked })}
                     className="w-5 h-5 text-ioai-green rounded focus:ring-2 focus:ring-ioai-green"
                   />
-                  <span className="text-sm font-bold text-gray-700">Témoignage vedette (page d'accueil)</span>
+                  <span className="text-sm font-bold text-gray-700">Publier sur la page d'accueil</span>
                 </label>
               </div>
             </div>
@@ -281,10 +365,20 @@ export default function TestimonialsManager() {
           <div className="flex gap-4 mt-8">
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-ioai-green text-white rounded-xl hover:bg-green-600 transition-all disabled:opacity-50"
             >
-              <Save size={20} />
-              Enregistrer
+              {saving ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Enregistrer
+                </>
+              )}
             </button>
             <button
               onClick={handleCancel}
@@ -303,53 +397,55 @@ export default function TestimonialsManager() {
           <div
             key={testimonial.id}
             className={`bg-white p-6 rounded-2xl border-2 shadow-sm hover:shadow-lg transition-all ${
-              testimonial.featured ? 'border-ioai-green' : 'border-gray-200'
+              testimonial.isPublished ? 'border-ioai-green' : 'border-gray-300'
             }`}
           >
             <div className="flex items-start gap-4 mb-4">
-              <img
-                src={testimonial.imageUrl}
-                alt={testimonial.name}
-                className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-              />
+              {testimonial.photoUrl && (
+                <img
+                  src={testimonial.photoUrl}
+                  alt={testimonial.authorName}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                />
+              )}
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900">{testimonial.name}</h3>
-                <p className="text-sm text-gray-600">{testimonial.role}</p>
+                <h3 className="text-lg font-bold text-gray-900">{testimonial.authorName}</h3>
+                <p className="text-sm text-gray-600">{testimonial.authorRole}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-gray-500">Édition {testimonial.edition}</span>
-                  <div className="flex">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} size={14} className="fill-yellow-400 text-yellow-400" />
-                    ))}
-                  </div>
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                    {testimonial.authorType}
+                  </span>
+                  {testimonial.organization && (
+                    <span className="text-xs text-gray-500">{testimonial.organization}</span>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="relative mb-4">
               <Quote className="absolute -top-2 -left-2 w-8 h-8 text-ioai-green/20" />
-              <p className="text-gray-700 italic pl-6">&ldquo;{testimonial.quote}&rdquo;</p>
+              <p className="text-gray-700 italic pl-6 line-clamp-3">&ldquo;{testimonial.content}&rdquo;</p>
             </div>
 
-            {testimonial.featured && (
+            {testimonial.videoUrl && (
               <div className="mb-4">
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                  <Star size={12} className="fill-current" />
-                  Témoignage vedette
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">
+                  <Video size={12} />
+                  Avec vidéo
                 </span>
               </div>
             )}
 
             <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
               <button
-                onClick={() => toggleFeatured(testimonial.id)}
+                onClick={() => togglePublished(testimonial)}
                 className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  testimonial.featured
+                  testimonial.isPublished
                     ? 'bg-green-50 text-green-700 hover:bg-green-100'
                     : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                {testimonial.featured ? '★ Vedette' : '☆ Mettre en vedette'}
+                {testimonial.isPublished ? '✓ Publié' : '○ Brouillon'}
               </button>
               <button
                 onClick={() => handleEdit(testimonial)}
@@ -373,6 +469,16 @@ export default function TestimonialsManager() {
             <p className="text-gray-500">Aucun témoignage créé. Cliquez sur "Nouveau Témoignage" pour commencer.</p>
           </div>
         )}
+      </div>
+
+      {/* Info */}
+      <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6">
+        <h3 className="font-bold text-blue-900 mb-2">💬 À propos des témoignages</h3>
+        <p className="text-blue-800 text-sm leading-relaxed">
+          Les témoignages généraux sont affichés sur la page d'accueil. Ils permettent de montrer
+          l'impact des Olympiades IA à travers les voix de mentors, parents, sponsors et partenaires.
+          Pour les témoignages de participants d'éditions passées, utilisez la section "Bilans (Archives)".
+        </p>
       </div>
     </div>
   );

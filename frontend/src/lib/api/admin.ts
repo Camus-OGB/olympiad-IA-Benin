@@ -22,6 +22,7 @@ export interface DashboardStats {
   qcmCompleted: number
   candidatesByRegion: Record<string, number>
   candidatesByStatus: Record<string, number>
+  candidatesByGender: Record<string, number>
   qcmAverageScore: number | null
   recentRegistrations: number
 }
@@ -74,6 +75,19 @@ export interface CandidateExport {
   subjectScores: Record<string, any>[]
   qcmResult?: Record<string, any>
   bulletins: Record<string, any>[]
+}
+
+export interface AuditLogEntry {
+  id: string
+  adminId?: string
+  adminEmail: string
+  action: string
+  resourceType: string
+  resourceId?: string
+  resourceLabel?: string
+  details?: string
+  ipAddress?: string
+  createdAt: string
 }
 
 // ==================== API CALLS ====================
@@ -167,6 +181,21 @@ export const adminApi = {
    */
   deleteCandidate: async (candidateId: string): Promise<{ message: string }> => {
     const { data } = await apiClient.delete(`/admin/candidates/${candidateId}`)
+    return data
+  },
+
+  /**
+   * Récupérer le journal d'audit
+   * GET /admin/audit-logs
+   */
+  getAuditLogs: async (params?: {
+    skip?: number
+    limit?: number
+    action?: string
+    resourceType?: string
+    adminId?: string
+  }): Promise<AuditLogEntry[]> => {
+    const { data } = await apiClient.get('/admin/audit-logs', { params })
     return data
   },
 }

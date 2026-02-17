@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date as date_type
 import logging
 
 from app.db.session import get_db
@@ -191,6 +191,14 @@ async def list_candidates(
     # Pagination
     candidates = query.offset(skip).limit(limit).all()
 
+    def is_majeur(dob) -> bool:
+        if not dob:
+            return False
+        birth = dob if isinstance(dob, date_type) else date_type.fromisoformat(str(dob))
+        today = date_type.today()
+        age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+        return age >= 18
+
     # Formater la réponse
     result = []
     for profile in candidates:
@@ -200,6 +208,7 @@ async def list_candidates(
             qcm_score = profile.qcm_result.score
 
         # Calculer le pourcentage de complétion du profil
+
         fields = [
             profile.date_of_birth,
             profile.gender,
@@ -208,11 +217,13 @@ async def list_candidates(
             profile.photo_url,
             profile.school_id,
             profile.grade,
-            profile.parent_contact is not None,
             len(profile.academic_records) > 0,
             len(profile.subject_scores) > 0,
             len(profile.bulletins) > 0,
         ]
+        # Informations tuteur comptées uniquement pour les mineurs
+        if not is_majeur(profile.date_of_birth):
+            fields.append(profile.parent_contact is not None)
         filled_count = sum(1 for field in fields if field)
         profile_completion = round((filled_count / len(fields)) * 100)
 

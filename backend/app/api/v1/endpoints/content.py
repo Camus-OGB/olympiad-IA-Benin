@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.db.session import get_db
 from app.models.user import User
-from app.models.content import News, FAQ, Edition, PastEdition, Partner, Page, TimelinePhase, PastTimelinePhase, GalleryImage, Testimonial
+from app.models.content import News, FAQ, Edition, PastEdition, Partner, Page, TimelinePhase, PastTimelinePhase, GalleryImage, Testimonial, SelectionCriterion
 from app.models.general_testimonial import GeneralTestimonial
 from app.models.candidate_profile import CandidateProfile
 from app.schemas.content import (
@@ -38,6 +38,8 @@ from app.schemas.content import (
     GeneralTestimonialResponse,
     TimelinePhaseCreate,
     TimelinePhaseResponse,
+    SelectionCriterionCreate,
+    SelectionCriterionResponse,
     PastTimelinePhaseCreate,
     PastTimelinePhaseResponse,
     GalleryImageCreate,
@@ -736,6 +738,93 @@ def delete_edition_phase(
     db.delete(db_phase)
     db.commit()
     return {"message": "Phase supprimée"}
+
+
+# ==================== CRITÈRES DE SÉLECTION ====================
+
+@router.post(
+    "/editions/{edition_id}/criteria",
+    response_model=SelectionCriterionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Ajouter un critère de sélection à une édition"
+)
+def create_edition_criterion(
+    edition_id: str,
+    criterion: SelectionCriterionCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Créer un nouveau critère de sélection pour une édition"""
+    edition = db.query(Edition).filter(Edition.id == edition_id).first()
+    if not edition:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Édition non trouvée")
+
+    new_criterion = SelectionCriterion(
+        edition_id=edition_id,
+        stage=criterion.stage,
+        stage_order=criterion.stage_order,
+        criterion=criterion.criterion,
+        min_score=criterion.min_score
+    )
+    db.add(new_criterion)
+    db.commit()
+    db.refresh(new_criterion)
+    return new_criterion
+
+
+@router.put(
+    "/editions/{edition_id}/criteria/{criterion_id}",
+    response_model=SelectionCriterionResponse,
+    summary="Mettre à jour un critère de sélection"
+)
+def update_edition_criterion(
+    edition_id: str,
+    criterion_id: str,
+    criterion: SelectionCriterionCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Mettre à jour un critère de sélection"""
+    db_criterion = db.query(SelectionCriterion).filter(
+        SelectionCriterion.id == criterion_id,
+        SelectionCriterion.edition_id == edition_id
+    ).first()
+
+    if not db_criterion:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Critère non trouvé")
+
+    db_criterion.stage = criterion.stage
+    db_criterion.stage_order = criterion.stage_order
+    db_criterion.criterion = criterion.criterion
+    db_criterion.min_score = criterion.min_score
+
+    db.commit()
+    db.refresh(db_criterion)
+    return db_criterion
+
+
+@router.delete(
+    "/editions/{edition_id}/criteria/{criterion_id}",
+    summary="Supprimer un critère de sélection"
+)
+def delete_edition_criterion(
+    edition_id: str,
+    criterion_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Supprimer un critère de sélection"""
+    db_criterion = db.query(SelectionCriterion).filter(
+        SelectionCriterion.id == criterion_id,
+        SelectionCriterion.edition_id == edition_id
+    ).first()
+
+    if not db_criterion:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Critère non trouvé")
+
+    db.delete(db_criterion)
+    db.commit()
+    return {"message": "Critère supprimé"}
 
 
 # ==================== ÉDITIONS PASSÉES ====================

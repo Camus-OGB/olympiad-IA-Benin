@@ -50,12 +50,14 @@ class Settings(BaseSettings):
         return sorted([o for o in origins if o])
 
     # Email SMTP
-    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    EMAILS_FROM_EMAIL: str = "noreply@olympiades-ia.bj"
-    EMAILS_FROM_NAME: str = "Olympiades IA Bénin"
+    EMAILS_FROM_EMAIL: str = ""
+    EMAILS_FROM_NAME: str = ""
+    MAIL_SSL_TLS: bool = False
+    MAIL_STARTTLS: bool = True
 
     # Supabase Storage - Buckets séparés
     SUPABASE_URL: str = ""

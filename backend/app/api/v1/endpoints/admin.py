@@ -55,9 +55,9 @@ async def get_dashboard_stats(
     # Nombre total de candidats
     total_candidates = db.query(CandidateProfile).count()
 
-    # Candidats avec email vérifié
-    verified_candidates = db.query(CandidateProfile).join(User).filter(
-        User.is_verified == True
+    # Candidats dont le profil a été validé (statut avancé au-delà de l'inscription)
+    verified_candidates = db.query(CandidateProfile).filter(
+        CandidateProfile.status != CandidateStatus.REGISTERED
     ).count()
 
     # QCM complétés (via la table QCMResult)

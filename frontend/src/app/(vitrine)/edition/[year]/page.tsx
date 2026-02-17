@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, MapPin, CheckCircle, ChevronDown, ChevronUp, ArrowRight, Sparkles, Brain, Users, Trophy, Globe, Target, Clock, Flag, Star, Zap, BookOpen, Award, Image, Newspaper, ExternalLink, Play } from 'lucide-react';
+import { Calendar, MapPin, CheckCircle, ChevronDown, ChevronUp, ArrowRight, Sparkles, Brain, Users, Trophy, Globe, Target, Clock, Flag, Star, Zap, BookOpen, Award } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, notFound } from 'next/navigation';
 import { contentApi, FAQItem } from '@/lib/api/content';
@@ -139,11 +139,29 @@ const EditionPage: React.FC = () => {
       loadActiveEdition();
    }, []);
 
-   if (!edition) {
+   // Attendre le chargement avant de décider si l'édition existe
+   const isActiveEditionYear = activeEdition && String(activeEdition.year) === String(year);
+
+   // Édition non trouvée dans le mock ET édition active chargée mais ce n'est pas cette année → 404
+   if (!edition && activeEditionLoaded && !isActiveEditionYear) {
       notFound();
    }
 
-   const isActiveEditionYear = activeEdition && String(activeEdition.year) === String(year);
+   // Fusionner données mock et données BDD : la BDD prime pour l'édition active
+   const effectiveEdition = edition ?? (isActiveEditionYear ? {
+      year: String(activeEdition.year),
+      title: activeEdition.title || `Édition ${activeEdition.year}`,
+      status: 'current',
+      description: activeEdition.description || '',
+      aoaiLocation: '',
+      aoaiDates: '',
+      heroImage: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1920&auto=format&fit=crop',
+      stats: {},
+      phases: [],
+      highlights: null,
+      results: null,
+      faqs: [],
+   } : null);
 
    const phasesForUI = (() => {
       // Pendant le chargement de l'édition active, ne rien afficher
@@ -151,6 +169,7 @@ const EditionPage: React.FC = () => {
       // Si c'est l'année de l'édition active, utiliser uniquement les données BDD
       if (isActiveEditionYear) {
          const now = new Date();
+         const criteria: any[] = activeEdition.selectionCriteria || [];
          return (activeEdition.timelinePhases || [])
             .slice()
             .sort((a: any, b: any) => (a.phaseOrder ?? 0) - (b.phaseOrder ?? 0))
@@ -169,20 +188,33 @@ const EditionPage: React.FC = () => {
                   return '';
                })();
 
+               // Associer les critères de cette phase par stageOrder = phaseOrder
+               const phaseCriteria = criteria
+                  .filter((c: any) => c.stageOrder === p.phaseOrder)
+                  .map((c: any) => c.criterion);
+
                return {
                   id: p.phaseOrder,
                   title: p.title,
                   description: p.description,
                   date: dateLabel,
                   status,
+                  criteria: phaseCriteria,
                };
             });
       }
       // Pour les éditions passées (non actives), utiliser les phases mock
-      return edition.phases || [];
+      return edition?.phases || [];
    })();
 
+   // Réinitialiser les phases visibles quand phasesForUI change (chargement async)
    useEffect(() => {
+      setVisiblePhases([]);
+   }, [phasesForUI.length]);
+
+   useEffect(() => {
+      if (phasesForUI.length === 0) return;
+
       const observer = new IntersectionObserver(
          (entries) => {
             entries.forEach((entry) => {
@@ -197,15 +229,22 @@ const EditionPage: React.FC = () => {
          { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
       );
 
-      phaseRefs.current.forEach((ref) => {
-         if (ref) observer.observe(ref);
-      });
+      // Petit délai pour laisser le DOM se mettre à jour après le render des phases
+      const timer = setTimeout(() => {
+         phaseRefs.current.forEach((ref) => {
+            if (ref) observer.observe(ref);
+         });
+      }, 50);
 
-      return () => observer.disconnect();
-   }, [visiblePhases]);
+      return () => {
+         clearTimeout(timer);
+         observer.disconnect();
+      };
+   }, [phasesForUI.length, visiblePhases]);
 
-   const inscriptionStatus = edition.status === 'current' ? 'Ouvertes' : edition.status === 'upcoming' ? 'Prochainement' : 'Terminée';
-   const isCompleted = edition.status === 'completed';
+   const editionStatus = effectiveEdition?.status ?? 'current';
+   const inscriptionStatus = editionStatus === 'current' ? 'Ouvertes' : editionStatus === 'upcoming' ? 'Prochainement' : 'Terminée';
+   const isCompleted = editionStatus === 'completed';
 
    return (
       <div className="bg-white min-h-screen overflow-hidden">
@@ -215,8 +254,8 @@ const EditionPage: React.FC = () => {
             {/* Background Image */}
             <div className="absolute inset-0 z-0">
                <img 
-                  src={edition.heroImage} 
-                  alt={edition.title}
+                  src={effectiveEdition.heroImage}
+                  alt={effectiveEdition.title}
                   className="w-full h-full object-cover"
                />
                <div className="absolute inset-0 bg-gradient-to-r from-ioai-blue/95 via-ioai-blue/85 to-ioai-blue/70"></div>
@@ -238,22 +277,26 @@ const EditionPage: React.FC = () => {
                      </div>
 
                      <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-black text-white mb-6 leading-tight">
-                        {edition.title}
+                        {effectiveEdition.title}
                      </h1>
 
                      <p className="text-xl text-white/80 mb-8 leading-relaxed max-w-xl">
-                        {edition.description}
+                        {effectiveEdition.description}
                      </p>
 
                      <div className="flex flex-wrap gap-4 mb-8">
+                        {effectiveEdition.aoaiLocation && (
                         <div className="flex items-center gap-2 bg-white/15 px-4 py-2 rounded-lg">
                            <MapPin className="w-4 h-4 text-white" />
-                           <span className="text-white">{edition.aoaiLocation}</span>
+                           <span className="text-white">{effectiveEdition.aoaiLocation}</span>
                         </div>
+                        )}
+                        {effectiveEdition.aoaiDates && (
                         <div className="flex items-center gap-2 bg-white/15 px-4 py-2 rounded-lg">
                            <Calendar className="w-4 h-4 text-white" />
-                           <span className="text-white">{edition.aoaiDates}</span>
+                           <span className="text-white">{effectiveEdition.aoaiDates}</span>
                         </div>
+                        )}
                      </div>
 
                      {!isCompleted && (
@@ -276,7 +319,7 @@ const EditionPage: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                     {edition.stats && Object.entries(edition.stats).map(([key, value]) => {
+                     {effectiveEdition.stats && Object.entries(effectiveEdition.stats).map(([key, value]) => {
                         const labels: Record<string, string> = {
                            participants: 'Participants',
                            regions: 'Régions',
@@ -311,14 +354,13 @@ const EditionPage: React.FC = () => {
                </h2>
                <p className="text-gray-600 text-lg max-w-2xl mx-auto">
                   {isCompleted 
-                     ? `Retour sur les ${phasesForUI.length} phases qui ont mené nos champions à ${edition.aoaiLocation}.`
+                     ? `Retour sur les ${phasesForUI.length} phases qui ont mené nos champions à ${effectiveEdition.aoaiLocation}.`
                      : (() => {
-                        // Calcul dynamique des bornes de dates depuis les phases BDD
                         const datesStart = phasesForUI.map((p: any) => p.date?.split(' → ')[0]).filter(Boolean);
                         const datesEnd = phasesForUI.map((p: any) => p.date?.split(' → ')[1] || p.date?.split(' → ')[0]).filter(Boolean);
                         const rangeLabel = (datesStart.length > 0 && datesEnd.length > 0)
                            ? `de ${datesStart[0]} à ${datesEnd[datesEnd.length - 1]}`
-                           : `en ${edition.year}`;
+                           : `en ${effectiveEdition.year}`;
                         return `${phasesForUI.length} phase${phasesForUI.length > 1 ? 's' : ''} ${rangeLabel} pour sélectionner l'équipe nationale.`;
                      })()
                   }
@@ -386,7 +428,7 @@ const EditionPage: React.FC = () => {
          )}
 
          {/* Section Avantages (pour édition en cours) */}
-         {edition.highlights && !isCompleted && (
+         {effectiveEdition.highlights && !isCompleted && (
             <section id="avantages" className="py-20 bg-white">
                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                   <div className="text-center mb-12">
@@ -403,7 +445,7 @@ const EditionPage: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                     {edition.highlights.map((highlight: any, idx: number) => {
+                     {effectiveEdition.highlights.map((highlight: any, idx: number) => {
                         const IconComp = iconMap[highlight.icon] || Star;
                         const colors = ['ioai-green', 'ioai-blue', 'benin-yellow', 'benin-red'];
                         const color = colors[idx % colors.length];
@@ -426,7 +468,7 @@ const EditionPage: React.FC = () => {
          )}
 
          {/* Section Résultats (pour édition terminée) */}
-         {edition.results && isCompleted && (
+         {effectiveEdition.results && isCompleted && (
             <section id="resultats" className="py-20 bg-gradient-to-b from-gray-50 to-white">
                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                   <div className="text-center mb-12">
@@ -448,7 +490,7 @@ const EditionPage: React.FC = () => {
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                         <div className="relative z-10">
                            <Award className="w-12 h-12 mb-4 text-benin-yellow" />
-                           <div className="text-4xl font-black mb-2">{edition.results.ranking}</div>
+                           <div className="text-4xl font-black mb-2">{effectiveEdition.results.ranking}</div>
                            <p className="text-white/80">Classement mondial</p>
                         </div>
                      </div>
@@ -456,7 +498,7 @@ const EditionPage: React.FC = () => {
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                         <div className="relative z-10">
                            <Star className="w-12 h-12 mb-4" />
-                           <div className="text-4xl font-black mb-2">{edition.results.medal}</div>
+                           <div className="text-4xl font-black mb-2">{effectiveEdition.results.medal}</div>
                            <p className="text-white/80">Récompense obtenue</p>
                         </div>
                      </div>
@@ -464,9 +506,9 @@ const EditionPage: React.FC = () => {
 
                   {/* Équipe */}
                   <div className="mb-8">
-                     <h3 className="text-2xl font-display font-bold text-gray-900 mb-8 text-center">L&apos;équipe nationale {edition.year}</h3>
+                     <h3 className="text-2xl font-display font-bold text-gray-900 mb-8 text-center">L&apos;équipe nationale {effectiveEdition.year}</h3>
                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {edition.results.team.map((member: any, idx: number) => (
+                        {effectiveEdition.results.team.map((member: any, idx: number) => (
                            <div key={idx} className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
                               <div className="relative h-48 overflow-hidden">
                                  <img 
@@ -494,7 +536,7 @@ const EditionPage: React.FC = () => {
          )}
 
          {/* CTA */}
-         {edition.status === 'current' && (
+         {editionStatus === 'current' && (
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-20">
                <div className="card-gradient rounded-2xl p-10 text-center text-white relative overflow-hidden group hover:shadow-2xl transition-all duration-700">
                   <div className="absolute inset-0 bg-circuit-pattern opacity-10"></div>
@@ -504,7 +546,7 @@ const EditionPage: React.FC = () => {
                      </div>
                      <h3 className="text-2xl font-display font-black mb-4">Prêt à commencer ?</h3>
                      <p className="text-white/80 text-base mb-6 max-w-xl mx-auto">
-                        Les inscriptions sont ouvertes jusqu&apos;à fin février {edition.year}.
+                        Les inscriptions sont ouvertes jusqu&apos;à fin février {effectiveEdition.year}.
                      </p>
                      <Link
                         href="/auth/inscription"

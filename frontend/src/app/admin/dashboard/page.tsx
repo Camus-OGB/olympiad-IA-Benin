@@ -160,7 +160,7 @@ export default function AdminDashboard() {
             </span>
           </div>
           <p className="text-2xl font-black text-gray-900">{stats?.verifiedCandidates ?? 0}</p>
-          <p className="text-sm text-gray-500">Profils vérifiés</p>
+          <p className="text-sm text-gray-500">Emails confirmés</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -263,7 +263,7 @@ export default function AdminDashboard() {
           <div className="space-y-3">
             {[
               { label: 'Inscrits', count: stats?.totalCandidates ?? 0, color: 'bg-blue-500', width: '100%' },
-              { label: 'Profils vérifiés', count: stats?.verifiedCandidates ?? 0, color: 'bg-green-500', width: stats?.totalCandidates ? `${(stats.verifiedCandidates / stats.totalCandidates * 100)}%` : '0%' },
+              { label: 'Emails confirmés', count: stats?.verifiedCandidates ?? 0, color: 'bg-green-500', width: stats?.totalCandidates ? `${(stats.verifiedCandidates / stats.totalCandidates * 100)}%` : '0%' },
               { label: 'QCM complétés', count: stats?.qcmCompleted ?? 0, color: 'bg-purple-500', width: stats?.totalCandidates ? `${(stats.qcmCompleted / stats.totalCandidates * 100)}%` : '0%' },
               { label: 'Sélectionnés', count: stats?.candidatesByStatus?.regional_selected ?? 0, color: 'bg-yellow-500', width: stats?.totalCandidates ? `${((stats?.candidatesByStatus?.regional_selected ?? 0) / stats.totalCandidates * 100)}%` : '0%' },
             ].map((step, index) => (

@@ -15,6 +15,7 @@ export default function CandidateLayout({
   const [isUserMenuOpen, setUserMenuOpen] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -69,6 +70,14 @@ export default function CandidateLayout({
           // Si le profil n'est pas approuvé et qu'on n'est pas déjà sur la page profil, rediriger
           if (pathname !== '/candidat/profil' && profile.status === 'registered') {
             router.push('/candidat/profil');
+          }
+
+          // Charger le nombre de notifications non lues depuis le dashboard
+          try {
+            const dashboard = await candidateApi.getMyDashboard();
+            setUnreadCount(dashboard.notifications?.length ?? 0);
+          } catch {
+            // Non bloquant
           }
         } catch (error) {
           console.error('Erreur lors de la vérification du profil:', error);
@@ -202,10 +211,14 @@ export default function CandidateLayout({
           </button>
 
           {/* Notifications Bell */}
-          <button className="relative p-2.5 text-gray-400 hover:text-ioai-blue hover:bg-gray-50 rounded-xl transition-colors">
+          <Link href="/candidat/notifications" className="relative p-2.5 text-gray-400 hover:text-ioai-blue hover:bg-gray-50 rounded-xl transition-colors">
             <Bell size={22} />
-            <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-benin-red rounded-full border-2 border-white"></span>
-          </button>
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 bg-benin-red text-white text-[10px] font-bold rounded-full border-2 border-white flex items-center justify-center leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
 
           {/* User Menu */}
           <div className="relative" ref={userMenuRef}>

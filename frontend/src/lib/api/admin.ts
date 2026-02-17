@@ -176,6 +176,22 @@ export const adminApi = {
   },
 
   /**
+   * Générer une URL signée pour télécharger un bulletin
+   * GET /admin/candidates/:candidateId/bulletins/:bulletinId/signed-url
+   */
+  getCandidateBulletinSignedUrl: async (
+    candidateId: string,
+    bulletinId: string,
+    expiresIn?: number,
+  ): Promise<{ signedUrl: string; expiresIn: number }> => {
+    const { data } = await apiClient.get(
+      `/admin/candidates/${candidateId}/bulletins/${bulletinId}/signed-url`,
+      { params: { expiresIn } },
+    )
+    return data
+  },
+
+  /**
    * Supprimer définitivement un candidat (Super Admin uniquement)
    * DELETE /admin/candidates/:candidateId
    */

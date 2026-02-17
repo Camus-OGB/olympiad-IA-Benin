@@ -517,6 +517,44 @@ export const contentApi = {
         await apiClient.delete(`/content/editions/${editionId}/phases/${phaseId}`)
     },
 
+    // ==================== CRITÈRES DE SÉLECTION ====================
+
+    /**
+     * Ajouter un critère de sélection (Admin)
+     * POST /content/editions/:editionId/criteria
+     */
+    createEditionCriterion: async (editionId: string, criterionData: {
+        stage: string
+        stageOrder: number
+        criterion: string
+        minScore?: number
+    }): Promise<SelectionCriterion> => {
+        const { data } = await apiClient.post(`/content/editions/${editionId}/criteria`, criterionData)
+        return data
+    },
+
+    /**
+     * Mettre à jour un critère (Admin)
+     * PUT /content/editions/:editionId/criteria/:criterionId
+     */
+    updateEditionCriterion: async (editionId: string, criterionId: string, criterionData: {
+        stage: string
+        stageOrder: number
+        criterion: string
+        minScore?: number
+    }): Promise<SelectionCriterion> => {
+        const { data } = await apiClient.put(`/content/editions/${editionId}/criteria/${criterionId}`, criterionData)
+        return data
+    },
+
+    /**
+     * Supprimer un critère (Admin)
+     * DELETE /content/editions/:editionId/criteria/:criterionId
+     */
+    deleteEditionCriterion: async (editionId: string, criterionId: string): Promise<void> => {
+        await apiClient.delete(`/content/editions/${editionId}/criteria/${criterionId}`)
+    },
+
     // ==================== ÉDITIONS PASSÉES ====================
 
     /**

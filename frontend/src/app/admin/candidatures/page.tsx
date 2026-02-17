@@ -7,11 +7,12 @@ import { useToast } from '@/hooks/useToast';
 import ToastContainer from '@/components/ToastContainer';
 
 interface Document {
-  id: number;
+  id: string;
   name: string;
   type: 'bulletin' | 'photo' | 'cni' | 'autre';
   url: string;
   uploadedAt: string;
+  bulletinId?: string;
 }
 
 interface Candidate {
@@ -63,6 +64,31 @@ export default function CandidateList() {
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
   const [viewingCandidate, setViewingCandidate] = useState<Candidate | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+
+  const handleOpenDocument = async (candidateId: string, doc: Document) => {
+    try {
+      if (doc.type === 'bulletin' && doc.bulletinId) {
+        const resp = await adminApi.getCandidateBulletinSignedUrl(candidateId, doc.bulletinId);
+        if (resp?.signedUrl) {
+          window.open(resp.signedUrl, '_blank', 'noopener,noreferrer');
+          return;
+        }
+      }
+
+      if (doc.url) {
+        window.open(doc.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      showError('Document indisponible');
+    } catch {
+      if (doc.url) {
+        window.open(doc.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      showError('Impossible d\'ouvrir le document');
+    }
+  };
 
   // Charger les candidats depuis l'API
   useEffect(() => {
@@ -146,7 +172,20 @@ export default function CandidateList() {
   });
 
   const calculateProfileCompletion = (profile: any): number => {
-    const fields = [
+    // Vérifier si le candidat est majeur (18 ans ou plus)
+    const isMajeur = (): boolean => {
+      if (!profile.dateOfBirth) return false;
+      const birthDate = new Date(profile.dateOfBirth);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age -= 1;
+      }
+      return age >= 18;
+    };
+
+    const fields: (any)[] = [
       profile.dateOfBirth,
       profile.gender,
       profile.phone,
@@ -154,12 +193,17 @@ export default function CandidateList() {
       profile.photoUrl,
       profile.schoolId,
       profile.grade,
-      profile.parentContact?.name,
-      profile.parentContact?.phone,
       profile.academicRecords?.length > 0,
       profile.subjectScores?.length > 0,
       profile.bulletins?.length > 0,
     ];
+
+    // Informations tuteur uniquement obligatoires pour les mineurs
+    if (!isMajeur()) {
+      fields.push(profile.parentContact?.name);
+      fields.push(profile.parentContact?.phone);
+    }
+
     const filledFields = fields.filter(Boolean).length;
     return Math.round((filledFields / fields.length) * 100);
   };
@@ -188,11 +232,12 @@ export default function CandidateList() {
         parentEmail: detailedData.profile.parentContact?.email || '',
         parentRelation: 'Parent', // Vous pouvez ajouter ce champ dans le backend si nécessaire
         documents: detailedData.profile.bulletins?.map((b: any, index: number) => ({
-          id: index + 1,
+          id: b.id || String(index + 1),
           name: `Bulletin T${b.trimester || ''}.pdf`,
           type: 'bulletin' as const,
           url: b.fileUrl,
           uploadedAt: detailedData.profile.createdAt,
+          bulletinId: b.id,
         })) || [],
         profileComplete: calculateProfileCompletion(detailedData.profile),
       };
@@ -794,7 +839,11 @@ export default function CandidateList() {
                               <p className="text-xs text-gray-400">Ajouté le {new Date(doc.uploadedAt).toLocaleDateString('fr-FR')}</p>
                             </div>
                           </div>
-                          <button className="p-2 text-gray-400 hover:text-ioai-blue hover:bg-blue-50 rounded-lg transition-colors" title="Voir le document">
+                          <button
+                            onClick={() => handleOpenDocument(viewingCandidate.id, doc)}
+                            className="p-2 text-gray-400 hover:text-ioai-blue hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Voir le document"
+                          >
                             <ExternalLink size={16} />
                           </button>
                         </div>

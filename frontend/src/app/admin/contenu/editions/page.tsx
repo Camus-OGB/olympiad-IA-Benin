@@ -6,7 +6,7 @@ import {
   Calendar, Loader2, AlertCircle, Plus, Save, Edit2, X,
   CheckCircle, Clock, Trash2, ArrowUp, ArrowDown
 } from 'lucide-react';
-import { contentApi, Edition, TimelinePhase, TimelinePhaseCreate } from '@/lib/api/content';
+import { contentApi, Edition, TimelinePhase, TimelinePhaseCreate, SelectionCriterion } from '@/lib/api/content';
 
 export default function EditionsManager() {
   // ── État édition ──
@@ -22,6 +22,7 @@ export default function EditionsManager() {
 
   // ── État phases ──
   const [phases, setPhases] = useState<TimelinePhase[]>([]);
+  const [criteria, setCriteria] = useState<SelectionCriterion[]>([]);
   const [phaseFormOpen, setPhaseFormOpen] = useState(false);
   const [editingPhase, setEditingPhase] = useState<TimelinePhase | null>(null);
   const [phaseTitle, setPhaseTitle] = useState('');
@@ -30,6 +31,7 @@ export default function EditionsManager() {
   const [phaseStartDate, setPhaseStartDate] = useState('');
   const [phaseEndDate, setPhaseEndDate] = useState('');
   const [phaseIsCurrent, setPhaseIsCurrent] = useState(false);
+  const [phaseCriteria, setPhaseCriteria] = useState<string[]>([]);
   const [phaseSaving, setPhaseSaving] = useState(false);
   const [phaseError, setPhaseError] = useState<string | null>(null);
   const [deletingPhaseId, setDeletingPhaseId] = useState<string | null>(null);
@@ -49,8 +51,10 @@ export default function EditionsManager() {
       if (active) {
         const sorted = [...(active.timelinePhases || [])].sort((a, b) => a.phaseOrder - b.phaseOrder);
         setPhases(sorted);
+        setCriteria(active.selectionCriteria || []);
       } else {
         setPhases([]);
+        setCriteria([]);
       }
     } finally {
       setLoading(false);
@@ -148,6 +152,7 @@ export default function EditionsManager() {
     setPhaseStartDate('');
     setPhaseEndDate('');
     setPhaseIsCurrent(false);
+    setPhaseCriteria([]);
     setPhaseError(null);
     setPhaseFormOpen(true);
   };
@@ -160,6 +165,11 @@ export default function EditionsManager() {
     setPhaseStartDate(phase.startDate || '');
     setPhaseEndDate(phase.endDate || '');
     setPhaseIsCurrent(phase.isCurrent);
+    // Charger les critères existants pour cette phase (stageOrder = phaseOrder)
+    const existing = criteria
+      .filter(c => c.stageOrder === phase.phaseOrder)
+      .map(c => c.criterion);
+    setPhaseCriteria(existing);
     setPhaseError(null);
     setPhaseFormOpen(true);
   };
@@ -167,6 +177,7 @@ export default function EditionsManager() {
   const cancelPhaseForm = () => {
     setPhaseFormOpen(false);
     setEditingPhase(null);
+    setPhaseCriteria([]);
     setPhaseError(null);
   };
 
@@ -189,8 +200,22 @@ export default function EditionsManager() {
       } else {
         await contentApi.createEditionPhase(edition.id, payload);
       }
+
+      // Synchroniser les critères : supprimer les anciens pour ce stageOrder, recréer
+      const existingForOrder = criteria.filter(c => c.stageOrder === phaseOrder);
+      await Promise.all(existingForOrder.map(c => contentApi.deleteEditionCriterion(edition.id, c.id)));
+      const validCriteria = phaseCriteria.map(s => s.trim()).filter(Boolean);
+      await Promise.all(validCriteria.map((text) =>
+        contentApi.createEditionCriterion(edition.id, {
+          stage: phaseTitle.trim(),
+          stageOrder: phaseOrder,
+          criterion: text,
+        })
+      ));
+
       setPhaseFormOpen(false);
       setEditingPhase(null);
+      setPhaseCriteria([]);
       load();
     } catch (err: any) {
       setPhaseError(err?.response?.data?.detail || 'Erreur lors de la sauvegarde');
@@ -558,6 +583,43 @@ export default function EditionsManager() {
                 </label>
               </div>
 
+              {/* Critères de sélection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-gray-600">Critères de sélection</label>
+                  <button
+                    type="button"
+                    onClick={() => setPhaseCriteria(prev => [...prev, ''])}
+                    className="flex items-center gap-1 px-2 py-1 bg-ioai-blue text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-all"
+                  >
+                    <Plus size={11} />Ajouter
+                  </button>
+                </div>
+                {phaseCriteria.length === 0 && (
+                  <p className="text-xs text-gray-400 italic">Aucun critère — la section critères sera masquée sur le site.</p>
+                )}
+                <div className="space-y-2">
+                  {phaseCriteria.map((c, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={c}
+                        onChange={e => setPhaseCriteria(prev => prev.map((v, j) => j === i ? e.target.value : v))}
+                        placeholder="Ex: Note supérieure à 14/20"
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:border-ioai-blue focus:outline-none bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPhaseCriteria(prev => prev.filter((_, j) => j !== i))}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {phaseError && (
                 <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{phaseError}</p>
               )}
@@ -638,6 +700,12 @@ export default function EditionsManager() {
                     {phase.description && (
                       <p className="text-xs text-gray-500 mt-0.5 truncate">{phase.description}</p>
                     )}
+                    {(() => {
+                      const count = criteria.filter(c => c.stageOrder === phase.phaseOrder).length;
+                      return count > 0 ? (
+                        <p className="text-xs text-ioai-green mt-0.5">{count} critère{count > 1 ? 's' : ''}</p>
+                      ) : null;
+                    })()}
                   </div>
 
                   {/* Actions */}

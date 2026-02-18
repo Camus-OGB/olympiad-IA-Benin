@@ -54,4 +54,3 @@ def init_db():
         # Exécuter le script complet en une seule transaction
         conn.execute(text(sql))
 
-    logger.info("Schéma de base de données initialisé via init_schema.sql")

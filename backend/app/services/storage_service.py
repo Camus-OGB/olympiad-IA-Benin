@@ -76,7 +76,6 @@ class StorageService:
             # Obtenir l'URL publique
             public_url = self.client.storage.from_(bucket_name).get_public_url(file_path)
 
-            logger.info(f"Fichier uploadé dans {bucket_name}: {file_path}")
             return public_url
 
         except Exception as e:
@@ -109,7 +108,6 @@ class StorageService:
 
             # Supprimer le fichier
             self.client.storage.from_(bucket_name).remove([file_path])
-            logger.info(f"Fichier supprimé de {bucket_name}: {file_path}")
             return True
 
         except Exception as e:

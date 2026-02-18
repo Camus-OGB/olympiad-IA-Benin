@@ -96,7 +96,6 @@ async def register(
     # Envoyer l'email de vérification
     try:
         await send_verification_email(user.email, otp_code)
-        logger.info(f"Email de vérification envoyé à {user.email}")
     except Exception as e:
         logger.error(f"Erreur envoi email: {str(e)}")
         # On ne bloque pas l'inscription même si l'email échoue
@@ -157,7 +156,6 @@ async def verify_otp(
     # Envoyer l'email de bienvenue
     try:
         await send_welcome_email(user.email, user.first_name)
-        logger.info(f"Email de bienvenue envoyé à {user.email}")
     except Exception as e:
         logger.error(f"Erreur envoi email de bienvenue: {str(e)}")
 
@@ -194,7 +192,6 @@ async def resend_otp(
     # Envoyer l'email
     try:
         await send_verification_email(user.email, otp_code)
-        logger.info(f"Nouveau code OTP envoyé à {user.email}")
     except Exception as e:
         logger.error(f"Erreur envoi email: {str(e)}")
         raise HTTPException(
@@ -268,8 +265,6 @@ async def login(
         path="/",  # Cookie valide sur toutes les routes
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
-
-    logger.info(f"Connexion réussie pour {user.email}")
 
     return {
         "access_token": access_token,
@@ -382,7 +377,6 @@ async def forgot_password(
     # Envoyer l'email
     try:
         await send_password_reset_email(user.email, otp_code)
-        logger.info(f"Email de réinitialisation envoyé à {user.email}")
     except Exception as e:
         logger.error(f"Erreur envoi email de réinitialisation: {str(e)}")
 
@@ -426,8 +420,6 @@ async def reset_password(
     user.otp_code = None
     user.otp_expires_at = None
     db.commit()
-
-    logger.info(f"Mot de passe réinitialisé pour {user.email}")
 
     return {"message": "Mot de passe réinitialisé avec succès"}
 
@@ -474,7 +466,5 @@ async def change_password(
     # Mettre à jour le mot de passe
     current_user.hashed_password = get_password_hash(request.new_password)
     db.commit()
-
-    logger.info(f"Mot de passe changé pour {current_user.email}")
 
     return {"message": "Mot de passe changé avec succès"}

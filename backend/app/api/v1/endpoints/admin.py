@@ -319,9 +319,6 @@ async def get_bulletin_signed_url(
     if not signed_url:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Impossible de générer l'URL")
 
-    logger.info(
-        f"URL signée bulletin générée pour candidate_id={candidate_id} bulletin_id={bulletin_id} par admin={current_admin.email}"
-    )
     return {"signed_url": signed_url, "expires_in": expires_in}
 
 
@@ -357,7 +354,7 @@ async def update_candidate_status(
 
     # Ajouter une note si fournie
     if request.note:
-        logger.info(f"Note pour candidat {candidate_id}: {request.note}")
+        pass  # note enregistrée dans le champ status
 
     candidate_name = f"{profile.user.first_name} {profile.user.last_name}" if profile.user else candidate_id
     log_audit(
@@ -397,11 +394,6 @@ async def update_candidate_status(
             )
         except Exception as e:
             logger.error(f"Erreur envoi notification: {str(e)}")
-
-    logger.info(
-        f"Statut du candidat {candidate_id} changé de {old_status} à {request.new_status} "
-        f"par l'admin {current_admin.email}"
-    )
 
     return {
         "message": "Statut mis à jour avec succès",
@@ -463,11 +455,6 @@ async def bulk_update_status(
     )
 
     db.commit()
-
-    logger.info(
-        f"Mise à jour en masse de {updated_count} candidats vers {request.new_status} "
-        f"par l'admin {current_admin.email}"
-    )
 
     return {
         "message": f"{updated_count} candidats mis à jour avec succès",
@@ -731,8 +718,6 @@ async def create_user(
     db.commit()
     db.refresh(new_user)
 
-    logger.info(f"Utilisateur {new_user.email} créé par {current_admin.email}")
-
     return {
         "id": new_user.id,
         "email": new_user.email,
@@ -805,8 +790,6 @@ async def update_user(
     db.commit()
     db.refresh(user)
 
-    logger.info(f"Utilisateur {user.email} modifié par {current_admin.email}")
-
     return {
         "id": user.id,
         "email": user.email,
@@ -864,11 +847,6 @@ async def toggle_user_status(
         request=http_request,
     )
     db.commit()
-
-    logger.info(
-        f"Statut de {user.email} changé à {'actif' if user.is_active else 'inactif'} "
-        f"par {current_admin.email}"
-    )
 
     return {
         "message": f"Utilisateur {'activé' if user.is_active else 'désactivé'} avec succès",

@@ -42,7 +42,6 @@ async def send_email(
             )
             response.raise_for_status()
 
-        logger.info(f"Email envoyé à {email_to}: {subject}")
         return True
     except Exception as e:
         logger.error(f"Erreur envoi email à {email_to}: {str(e)}")

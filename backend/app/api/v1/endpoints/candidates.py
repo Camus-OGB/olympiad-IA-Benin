@@ -167,8 +167,6 @@ async def update_my_profile(
     db.commit()
     db.refresh(profile)
 
-    logger.info(f"Profil mis à jour pour l'utilisateur {current_user.id}")
-
     return profile
 
 
@@ -243,8 +241,6 @@ async def upload_photo(
 
     profile.photo_url = photo_url
     db.commit()
-
-    logger.info(f"Photo uploadée pour l'utilisateur {current_user.id}")
 
     return {"file_url": photo_url}
 
@@ -342,8 +338,6 @@ async def upload_bulletin(
     db.commit()
     db.refresh(new_bulletin)
 
-    logger.info(f"Bulletin uploadé pour l'utilisateur {current_user.id}")
-
     return {"file_url": bulletin_url, "bulletin_id": new_bulletin.id}
 
 
@@ -379,8 +373,6 @@ async def delete_bulletin(
 
     db.delete(bulletin)
     db.commit()
-
-    logger.info(f"Bulletin {bulletin_id} supprimé pour l'utilisateur {current_user.id}")
 
     return {"message": "Bulletin supprimé avec succès"}
 
@@ -569,7 +561,6 @@ async def create_or_get_school(
         if updated:
             db.commit()
             db.refresh(existing_school)
-            logger.info(f"École mise à jour: {existing_school.name} - région: {existing_school.region}")
         return existing_school
 
     # Créer une nouvelle école
@@ -582,7 +573,5 @@ async def create_or_get_school(
     db.add(new_school)
     db.commit()
     db.refresh(new_school)
-
-    logger.info(f"École créée: {new_school.name} (ID: {new_school.id})")
 
     return new_school

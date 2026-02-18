@@ -36,12 +36,6 @@ async def lifespan(app: FastAPI):
     """
     Événements au démarrage et à l'arrêt de l'application
     """
-    # Démarrage
-    logger.info(f"🚀 Démarrage de {settings.APP_NAME} v{settings.APP_VERSION}")
-    logger.info(f"📊 Environnement: {settings.ENVIRONMENT}")
-
-    # Initialiser la base de données
-    logger.info("📦 Initialisation de la base de données...")
     init_db()
 
     app.state.redis: Optional[object] = None
@@ -92,7 +86,6 @@ async def lifespan(app: FastAPI):
     yield  # L'application tourne
 
     # Arrêt
-    logger.info("🛑 Arrêt de l'application...")
 
     if getattr(app.state, "redis", None) is not None:
         try:
@@ -187,16 +180,6 @@ async def access_log_middleware(request: Request, call_next):
     duration_ms = (time.perf_counter() - start) * 1000
 
     response.headers["X-Request-ID"] = request_id
-    logger.info(
-        "ACCESS request_id=%s ip=%s user_id=%s method=%s path=%s status=%s duration_ms=%.2f",
-        request_id,
-        request.client.host if request.client else "-",
-        user_id or "-",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-    )
     return response
 
 

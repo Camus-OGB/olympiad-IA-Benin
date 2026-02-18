@@ -82,8 +82,6 @@ async def create_question(
     db.commit()
     db.refresh(new_question)
 
-    logger.info(f"Question créée: {new_question.id} par {current_admin.email}")
-
     return new_question
 
 
@@ -127,7 +125,6 @@ async def bulk_create_questions(
 
     try:
         db.commit()
-        logger.info(f"{created_count} questions créées en masse par {current_admin.email}")
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Erreur lors de la sauvegarde: {str(e)}")
@@ -164,8 +161,6 @@ async def update_question(
     db.commit()
     db.refresh(question)
 
-    logger.info(f"Question {question_id} mise à jour par {current_admin.email}")
-
     return question
 
 
@@ -187,8 +182,6 @@ async def delete_question(
     # Soft delete
     question.is_active = False
     db.commit()
-
-    logger.info(f"Question {question_id} supprimée par {current_admin.email}")
 
     return {"message": "Question supprimée avec succès"}
 
@@ -279,8 +272,6 @@ async def create_session(
     db.commit()
     db.refresh(new_session)
 
-    logger.info(f"Session QCM créée: {new_session.id} par {current_admin.email}")
-
     return new_session
 
 
@@ -306,8 +297,6 @@ async def update_session(
 
     db.commit()
     db.refresh(session)
-
-    logger.info(f"Session {session_id} mise à jour par {current_admin.email}")
 
     return session
 
@@ -341,8 +330,6 @@ async def delete_session(
 
     db.delete(session)
     db.commit()
-
-    logger.info(f"Session {session_id} supprimée par {current_admin.email}")
 
     return {"message": "Session supprimée avec succès"}
 
@@ -494,11 +481,6 @@ async def start_qcm_attempt(
 
     db.commit()
     db.refresh(attempt)
-
-    logger.info(
-        f"Tentative QCM démarrée: {attempt.id} pour candidat {profile.id} "
-        f"({len(selected_questions)} questions tirées)"
-    )
 
     return attempt
 
@@ -701,7 +683,8 @@ async def complete_attempt(
         ).first()
 
         if question:
-            is_correct = answer.answer_given == question.correct_answer
+            correct_answers = question.correct_answers or []
+            is_correct = answer.answer_given in correct_answers
             answer.is_correct = is_correct
             if is_correct:
                 correct_count += 1
@@ -725,11 +708,6 @@ async def complete_attempt(
 
     db.commit()
     db.refresh(attempt)
-
-    logger.info(
-        f"Tentative {attempt_id} complétée: {correct_count}/{attempt.total_questions} "
-        f"({score_percentage}%) - {'RÉUSSI' if passed else 'ÉCHOUÉ'}"
-    )
 
     return CompleteAttemptResponse(
         id=attempt.id,

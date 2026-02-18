@@ -207,8 +207,6 @@ async def create_news(
     db.commit()
     db.refresh(news)
 
-    logger.info(f"Actualité créée: {news.title} par {current_admin.email}")
-
     await _cache_invalidate_prefix(request, "content:news:")
     return news
 
@@ -248,8 +246,6 @@ async def update_news(
     db.commit()
     db.refresh(news)
 
-    logger.info(f"Actualité mise à jour: {news.title} par {current_admin.email}")
-
     if request is not None:
         await _cache_invalidate_prefix(request, "content:news:")
     return news
@@ -277,8 +273,6 @@ async def delete_news(
               resource_id=news_id, resource_label=news.title, request=request)
     db.delete(news)
     db.commit()
-
-    logger.info(f"Actualité supprimée: {news.title} par {current_admin.email}")
 
     await _cache_invalidate_prefix(request, "content:news:")
 
@@ -333,8 +327,6 @@ async def create_faq(
     db.add(faq)
     db.commit()
     db.refresh(faq)
-
-    logger.info(f"FAQ créée par {current_admin.email}")
 
     await _cache_invalidate_prefix(request, "content:faq:")
     return faq
@@ -592,8 +584,6 @@ async def create_edition(
               resource_label=edition_data.title, details={"year": edition_data.year}, request=request)
     db.commit()
     db.refresh(edition)
-
-    logger.info(f"Édition {edition.year} créée par {current_admin.email}")
 
     await _cache_invalidate_prefix(request, "content:editions:")
     return edition
@@ -883,8 +873,6 @@ async def create_past_edition(
     db.commit()
     db.refresh(edition)
 
-    logger.info(f"Édition passée {edition.year} créée par {current_admin.email}")
-
     return edition
 
 
@@ -951,8 +939,6 @@ async def create_partner(
     db.add(partner)
     db.commit()
     db.refresh(partner)
-
-    logger.info(f"Partenaire créé: {partner.name} par {current_admin.email}")
 
     return partner
 
@@ -1070,8 +1056,6 @@ async def create_page(
     db.add(page)
     db.commit()
     db.refresh(page)
-
-    logger.info(f"Page créée: {page.slug} par {current_admin.email}")
 
     return page
 

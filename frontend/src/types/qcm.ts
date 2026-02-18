@@ -24,10 +24,16 @@ export interface QCMSession {
 
 export type QCMStatus = 'locked' | 'available' | 'in_progress' | 'completed'
 
+export interface QuestionOption {
+  id: number
+  text: string
+}
+
 export interface Question {
   id: string
   question: string
-  options: string[]
+  options: QuestionOption[]
+  is_multiple_answer?: boolean
   correctAnswer?: number  // Index de la bonne réponse (seulement pour l'admin ou après soumission)
   explanation?: string
   points?: number

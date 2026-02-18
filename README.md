@@ -43,17 +43,6 @@ uvicorn app.main:app --reload
 API : http://localhost:8000
 Docs : http://localhost:8000/api/docs
 
-## 🧹 Nettoyage avant mise en production / push GitHub
-
-### Fichiers à ne jamais committer
-
-- `.env`, `.env.local`, `.env.*`
-- `backend/venv/`, `venv/`
-- `frontend/node_modules/`, `node_modules/`
-- `frontend/.next/`, `.next/`, `out/`
-- `*.db`, `*.sqlite*` (ex: `backend/olympiades.db`)
-- `*.log` (ex: `backend/backend.log`)
-
 Le projet contient des templates :
 
 - `backend/.env.example`
@@ -74,12 +63,6 @@ olympiades-ia-benin/
 ├── docs/              # Documentation
 └── README.md
 ```
-
-## 📚 Documentation
-
-- [Setup Backend FastAPI](docs/FASTAPI_BACKEND_SETUP.md)
-- [Routes API Complètes](docs/FASTAPI_ROUTES_COMPLETES.md)
-- [Guide de Réorganisation](docs/REORGANISATION_PROJET.md)
 
 ## 🛠️ Stack Technologique
 
@@ -113,30 +96,3 @@ uvicorn app.main:app --reload  # Développement
 pytest                          # Tests
 black app/                      # Format code
 ```
-
-## 🚢 Déploiement
-
-### Frontend
-- Vercel (recommandé)
-- Netlify
-- AWS Amplify
-
-### Backend
-- Railway
-- Render
-- Fly.io
-- AWS/GCP/Azure
-
-## 📄 Licence
-
-Propriété de Sèmè City - Tous droits réservés © 2026
-
-## 📞 Contact
-
-- **Email:** contact@olympiades-ia.bj
-- **Site:** https://olympiades-ia.bj
-- **Organisateur:** Sèmè City, Bénin
-
----
-
-**Développé avec ❤️ pour les futurs champions de l'IA au Bénin**

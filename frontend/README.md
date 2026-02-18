@@ -90,8 +90,6 @@ npm run start    # Serveur de production
 npm run lint     # Vérification du code
 ```
 
-## 📦 Déploiement
-
 ### Vercel (Recommandé)
 
 ```bash
@@ -114,29 +112,3 @@ Créez un fichier `.env.local` :
 # API URLs (à configurer)
 NEXT_PUBLIC_API_URL=https://api.olympiades-ia.bj
 ```
-
-## 📝 Migration depuis Vite
-
-Ce projet a été migré de Vite vers Next.js. Pour plus de détails, consultez [MIGRATION.md](./MIGRATION.md).
-
-## 🤝 Contribution
-
-1. Fork le projet
-2. Créez une branche (`git checkout -b feature/AmazingFeature`)
-3. Commit vos changements (`git commit -m 'Add AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrez une Pull Request
-
-## 📄 Licence
-
-Propriété de Sèmè City - Tous droits réservés © 2026
-
-## 📞 Contact
-
-- **Email:** contact@olympiades-ia.bj
-- **Site:** https://olympiades-ia.bj
-- **Organisateur:** Sèmè City, Bénin
-
----
-
-**Développé avec ❤️ pour les futurs champions de l'IA au Bénin**

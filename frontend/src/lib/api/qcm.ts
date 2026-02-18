@@ -28,10 +28,17 @@ export interface SessionForCandidate {
   completedAt?: string | null
 }
 
+export interface QuestionOption {
+  id: number
+  text: string
+}
+
 export interface Question {
   id: string
   question: string
-  options: string[]
+  options: QuestionOption[]
+  is_multiple_answer?: boolean
+  points?: number
   correctAnswer?: number
 }
 
@@ -83,11 +90,6 @@ export interface QCMSessionResponse {
   isActive: boolean
   createdAt: string
   updatedAt: string
-}
-
-export interface QuestionOption {
-  text: string
-  id: number
 }
 
 export interface QuestionCreate {

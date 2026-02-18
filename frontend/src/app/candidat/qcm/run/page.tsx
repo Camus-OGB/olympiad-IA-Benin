@@ -382,7 +382,7 @@ export default function QcmRun() {
               }`}>
                 {String.fromCharCode(65 + index)}
               </span>
-              {option}
+              {typeof option === 'string' ? option : option.text}
             </button>
           ))}
         </div>

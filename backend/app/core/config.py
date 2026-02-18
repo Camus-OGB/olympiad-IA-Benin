@@ -49,8 +49,8 @@ class Settings(BaseSettings):
             origins.add(self.FRONTEND_URL.strip())
         return sorted([o for o in origins if o])
 
-    # Email (Resend API)
-    RESEND_API_KEY: str = ""
+    # Email (Brevo API)
+    BREVO_API_KEY: str = ""
     EMAILS_FROM_EMAIL: str = ""
     EMAILS_FROM_NAME: str = ""
 

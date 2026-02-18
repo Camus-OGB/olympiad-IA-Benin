@@ -1,6 +1,7 @@
 """
 Service d'envoi d'emails
-Utilise l'API HTTP Resend — pas de SMTP, fonctionne sur tous les hébergeurs
+Utilise l'API HTTP Brevo (ex-Sendinblue) — pas de SMTP, fonctionne sur tous les hébergeurs
+300 emails/jour gratuits, envoie vers n'importe quelle adresse sans domaine vérifié
 """
 import httpx
 from app.core.config import settings
@@ -15,22 +16,25 @@ async def send_email(
     html_content: str,
     text_content: str = None
 ):
-    """Envoie un email via l'API HTTP Resend"""
+    """Envoie un email via l'API HTTP Brevo"""
     try:
         payload = {
-            "from": f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>",
-            "to": [email_to],
+            "sender": {
+                "name": settings.EMAILS_FROM_NAME,
+                "email": settings.EMAILS_FROM_EMAIL,
+            },
+            "to": [{"email": email_to}],
             "subject": subject,
-            "html": html_content,
+            "htmlContent": html_content,
         }
         if text_content:
-            payload["text"] = text_content
+            payload["textContent"] = text_content
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "https://api.resend.com/emails",
+                "https://api.brevo.com/v3/smtp/email",
                 headers={
-                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "api-key": settings.BREVO_API_KEY,
                     "Content-Type": "application/json",
                 },
                 json=payload,

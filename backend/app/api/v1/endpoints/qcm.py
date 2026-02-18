@@ -595,7 +595,9 @@ async def get_attempt_questions(
         questions.append(QuestionForCandidate(
             id=question.id,
             question=question.question,
-            options=question.options
+            options=question.options,
+            is_multiple_answer=question.is_multiple_answer,
+            points=question.points
         ))
 
     return questions

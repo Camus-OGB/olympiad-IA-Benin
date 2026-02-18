@@ -41,7 +41,7 @@ export default function QcmQuestions() {
           text: q.question,
           difficulty: q.difficulty === 'easy' ? 'Facile' : q.difficulty === 'medium' ? 'Moyen' : 'Difficile',
           sessions: 0,
-          choices: q.options || [],
+          choices: (q.options || []).map((o: any) => typeof o === 'string' ? o : o.text),
           correctAnswer: q.correctAnswer || 0,
         }));
         
